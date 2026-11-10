@@ -69,21 +69,23 @@ Add to your MCP configuration:
   "mcpServers": {
     "prusa-mcp": {
       "command": "node",
-      "args": ["/path/to/PrusaMCP/build/index.js"],
-      "env": {
-        "PRUSASLICER_PATH": "C:/Program Files/Prusa3D/PrusaSlicer/prusa-slicer-console.exe"
-      }
+      "args": ["/path/to/PrusaMCP/build/index.js"]
     }
   }
 }
 ```
 
+PrusaSlicer is auto-detected in the standard install locations. Set `PRUSASLICER_PATH` in `env` only when it lives elsewhere:
+
+- **Windows**: `"C:/Program Files/Prusa3D/PrusaSlicer/prusa-slicer-console.exe"`
+- **macOS**: `"/Applications/PrusaSlicer.app"` (the `.app` bundle or the binary inside it, `Contents/MacOS/PrusaSlicer`)
+
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PRUSASLICER_PATH` | Path to `prusa-slicer-console.exe` | Auto-detected |
-| `PRUSASLICER_PROFILES_DIR` | PrusaSlicer profiles folder | `%APPDATA%/PrusaSlicer` |
+| `PRUSASLICER_PATH` | PrusaSlicer CLI: `prusa-slicer-console.exe` on Windows, `PrusaSlicer.app` on macOS | Auto-detected |
+| `PRUSASLICER_PROFILES_DIR` | PrusaSlicer profiles folder | Windows: `%APPDATA%/PrusaSlicer`<br>macOS: `~/Library/Application Support/PrusaSlicer`<br>Linux: `~/.config/PrusaSlicer` |
 | `OCTOPRINT_URL` | Your OctoPrint instance URL | — |
 | `OCTOPRINT_API_KEY` | OctoPrint API key | — |
 
@@ -142,7 +144,8 @@ The recommendation engine is built on:
 src/
 ├── index.ts              # MCP entry point + STDIO transport
 ├── types.ts              # TypeScript interfaces
-├── config.ts             # PrusaSlicer detection
+├── config.ts             # PrusaSlicer detection (Windows, macOS, Linux)
+├── platform/             # Window title + capture: win32.ts (PowerShell), darwin.ts (CGWindowList + screencapture)
 ├── stl-parser.ts         # Native binary/ASCII STL parser
 ├── threemf-parser.ts     # 3MF parser (ZIP + XML)
 ├── mesh-analyzer.ts      # Geometric analysis
@@ -176,7 +179,19 @@ src/
 
 - **Node.js** >= 18
 - **PrusaSlicer** (optional — only needed for slice, screenshot, get_current_model)
-- **Windows** for screenshot feature (uses PrintWindow API)
+- **Windows or macOS** for `screenshot_prusaslicer` and `get_current_model` (they read the PrusaSlicer window). Slicing also works on Linux.
+
+### macOS: Screen Recording permission
+
+`screenshot_prusaslicer` and `get_current_model` read PrusaSlicer's window through `CGWindowList` and `screencapture`. Without Screen Recording permission, macOS hides window titles and contents. Grant it to the app that runs the MCP server (Claude Desktop, Terminal, VS Code, Cursor...) in **System Settings > Privacy & Security > Screen & System Audio Recording**, then restart that app.
+
+Without it, slicing and all analysis tools keep working, and `get_current_model` falls back to the most recent project in PrusaSlicer's history.
+
+Smoke test on any platform, with PrusaSlicer open:
+
+```bash
+npm run build && node test/test-platform.js
+```
 
 ## License
 

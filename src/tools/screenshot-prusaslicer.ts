@@ -1,92 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import { execFile } from "node:child_process";
 import { readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { existsSync, writeFileSync, unlinkSync } from "node:fs";
-
-/**
- * PowerShell script that captures PrusaSlicer's window using PrintWindow API.
- * Works even when PrusaSlicer is in the background.
- */
-const CAPTURE_SCRIPT = `
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
-$proc = Get-Process -Name 'prusa-slicer' -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $proc) {
-    Write-Error "NOT_RUNNING"
-    exit 1
-}
-
-Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
-using System;
-using System.Drawing;
-using System.Runtime.InteropServices;
-
-public class WindowCapture {
-    [DllImport("user32.dll")]
-    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    [DllImport("user32.dll")]
-    public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct RECT {
-        public int Left, Top, Right, Bottom;
-    }
-
-    public static Bitmap CaptureWindow(IntPtr hwnd) {
-        RECT rect;
-        GetWindowRect(hwnd, out rect);
-        int width = rect.Right - rect.Left;
-        int height = rect.Bottom - rect.Top;
-        if (width <= 0 || height <= 0) {
-            width = 1920; height = 1080;
-        }
-        Bitmap bmp = new Bitmap(width, height);
-        using (Graphics g = Graphics.FromImage(bmp)) {
-            IntPtr hdc = g.GetHdc();
-            PrintWindow(hwnd, hdc, 2);
-            g.ReleaseHdc(hdc);
-        }
-        return bmp;
-    }
-}
-'@
-
-$hwnd = $proc.MainWindowHandle
-$bitmap = [WindowCapture]::CaptureWindow($hwnd)
-$bitmap.Save($args[0])
-$bitmap.Dispose()
-Write-Host "OK"
-`;
-
-function capturePrusaSlicerWindow(outputPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    // Write script to temp file and execute
-    const scriptPath = join(tmpdir(), `prusa-capture-${Date.now()}.ps1`);
-    writeFileSync(scriptPath, CAPTURE_SCRIPT, "utf-8");
-
-    execFile(
-      "powershell",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, outputPath],
-      { timeout: 15000, windowsHide: true },
-      (error, stdout, stderr) => {
-        // Cleanup script
-        try { unlinkSync(scriptPath); } catch { /* ignore */ }
-
-        if (error || stderr?.includes("NOT_RUNNING")) {
-          console.error(`[screenshot] Capture failed: ${stderr || error?.message}`);
-          resolve(false);
-          return;
-        }
-        resolve(stdout.trim().includes("OK"));
-      },
-    );
-  });
-}
+import { existsSync } from "node:fs";
+import { capturePrusaSlicerWindow } from "../platform/index.js";
 
 export function registerScreenshotPrusaSlicer(server: McpServer) {
   server.registerTool(
@@ -95,7 +12,8 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
       title: "Capturer l'écran de PrusaSlicer",
       description:
         "Prend un screenshot de la fenêtre PrusaSlicer (même en arrière-plan) " +
-        "et retourne l'image. Le fichier temporaire est automatiquement supprimé après lecture.",
+        "et retourne l'image. Le fichier temporaire est automatiquement supprimé après lecture. " +
+        "Windows et macOS (macOS : autorisation Enregistrement de l'écran requise pour l'app hôte).",
       inputSchema: {},
     },
     async () => {
@@ -103,14 +21,17 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
         const screenshotPath = join(tmpdir(), `prusa-screenshot-${Date.now()}.png`);
 
         console.error("[screenshot] Capturing PrusaSlicer window...");
-        const success = await capturePrusaSlicerWindow(screenshotPath);
+        const result = await capturePrusaSlicerWindow(screenshotPath);
 
-        if (!success || !existsSync(screenshotPath)) {
+        if (!result.ok || !existsSync(screenshotPath)) {
+          const reason = result.ok ? "no image was written" : result.reason;
+          console.error(`[screenshot] Capture failed: ${reason}`);
+          try { await unlink(screenshotPath); } catch { /* not written */ }
           return {
             isError: true,
             content: [{
               type: "text" as const,
-              text: "Impossible de capturer PrusaSlicer. Vérifie qu'il est ouvert.",
+              text: `Impossible de capturer PrusaSlicer : ${reason}`,
             }],
           };
         }

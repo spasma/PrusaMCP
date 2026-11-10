@@ -43,7 +43,7 @@ async function main() {
   registerCheckPrintability(server);
   registerSuggestOrientation(server);
   registerRecommendProfile(server);
-  registerGenerateConfig(server);
+  registerGenerateConfig(server, config);
   registerEstimateCost(server);
   registerSearchFilament(server);
   registerPrintWizard(server);

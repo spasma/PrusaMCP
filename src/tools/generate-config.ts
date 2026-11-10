@@ -7,9 +7,11 @@ import { recommendProfile } from "../profile-engine.js";
 import { writeIniFile, writeRawIniFile, profileToIniSettings, serializeIni } from "../ini-writer.js";
 import { parseStl } from "../stl-parser.js";
 import { analyzeMesh } from "../mesh-analyzer.js";
-import type { PrusaSlicerSettings, MeshAnalysis } from "../types.js";
+import type { PrusaSlicerSettings, MeshAnalysis, PrusaConfig } from "../types.js";
 
-export function registerGenerateConfig(server: McpServer) {
+export function registerGenerateConfig(server: McpServer, config: PrusaConfig) {
+  const cli = config.executablePath ? `"${config.executablePath}"` : "prusa-slicer";
+
   server.registerTool(
     "generate_prusaslicer_config",
     {
@@ -77,7 +79,7 @@ export function registerGenerateConfig(server: McpServer) {
           "",
           `Usage PrusaSlicer CLI :`,
           "```",
-          `prusa-slicer-console.exe --load "${finalPath}" --export-gcode model.stl`,
+          `${cli} --load "${finalPath}" --export-gcode model.stl`,
           "```",
         ];
 
