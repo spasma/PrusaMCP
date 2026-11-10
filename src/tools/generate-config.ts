@@ -15,21 +15,28 @@ export function registerGenerateConfig(server: McpServer, config: PrusaConfig) {
   server.registerTool(
     "generate_prusaslicer_config",
     {
-      title: "Générer un fichier config PrusaSlicer",
+      title: "Generate a PrusaSlicer config file",
       description:
-        "Génère un fichier .ini compatible PrusaSlicer à partir d'une intention ou de paramètres custom. " +
-        "Le fichier peut être chargé directement avec --load dans PrusaSlicer.",
+        "Generates a PrusaSlicer-compatible .ini file from a print goal or custom settings. " +
+        "The file can be loaded directly with --load in PrusaSlicer.",
       inputSchema: {
-        printer: z.string().default("Generic").describe("Nom de l'imprimante"),
-        nozzle: z.number().default(0.4).describe("Diamètre de buse en mm"),
-        goal: z.string().describe("Intention d'impression"),
-        material: z.string().default("PLA").describe("Matériau"),
-        stl_path: z.string().optional().describe("Chemin STL pour analyse auto"),
-        output_path: z.string().optional().describe("Chemin de sortie pour le .ini (sinon fichier temporaire)"),
+        printer: z.string().default("Generic").describe("Printer name"),
+        nozzle: z.number().default(0.4).describe("Nozzle diameter in mm"),
+        goal: z.string().describe("Print goal (draft, standard, quality, strong, vase, speed; same aliases as recommend_profile)"),
+        material: z.string().default("PLA").describe("Material"),
+        stl_path: z.string().optional().describe("STL path for automatic analysis"),
+        output_path: z.string().optional().describe("Output path for the .ini (default: a temporary file); an existing file is overwritten"),
         custom_settings: z
           .record(z.string(), z.union([z.string(), z.number()]))
           .optional()
-          .describe("Paramètres custom PrusaSlicer à overrider (ex: {\"layer_height\": 0.15})"),
+          .describe("Custom PrusaSlicer settings to override (e.g. {\"layer_height\": 0.15})"),
+      },
+      annotations: {
+        title: "Generate a PrusaSlicer config file",
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
       },
     },
     async ({ printer, nozzle, goal, material, stl_path, output_path, custom_settings }) => {
@@ -69,15 +76,15 @@ export function registerGenerateConfig(server: McpServer, config: PrusaConfig) {
         const iniContent = serializeIni(settings);
 
         const lines = [
-          `## Config PrusaSlicer générée`,
-          `**Fichier** : ${finalPath}`,
-          `**Objectif** : ${profile.goal} | **Matériau** : ${profile.material} | **Buse** : ${profile.nozzle}mm`,
+          `## PrusaSlicer config generated`,
+          `**File**: ${finalPath}`,
+          `**Goal**: ${profile.goal} | **Material**: ${profile.material} | **Nozzle**: ${profile.nozzle}mm`,
           "",
           "```ini",
           iniContent.trim(),
           "```",
           "",
-          `Usage PrusaSlicer CLI :`,
+          `PrusaSlicer CLI usage:`,
           "```",
           `${cli} --load "${finalPath}" --export-gcode model.stl`,
           "```",
@@ -91,7 +98,7 @@ export function registerGenerateConfig(server: McpServer, config: PrusaConfig) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur de génération : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Generation error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

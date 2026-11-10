@@ -8,13 +8,18 @@ export function registerSuggestOrientation(server: McpServer) {
   server.registerTool(
     "suggest_orientation",
     {
-      title: "Suggérer la meilleure orientation d'impression",
+      title: "Suggest the best print orientation",
       description:
-        "Teste 6 orientations principales d'un modèle 3D et classe chacune " +
-        "selon les overhangs, la hauteur d'impression, le contact plateau, et le volume de supports. " +
-        "Retourne un classement avec le score et l'explication pour chaque orientation.",
+        "Tests the 6 principal orientations of a 3D model and ranks each one " +
+        "by overhangs, print height, bed contact and support volume. " +
+        "Returns a ranking with a score and an explanation per orientation.",
       inputSchema: {
-        file_path: z.string().describe("Chemin absolu vers le fichier STL ou 3MF"),
+        file_path: z.string().describe("Absolute path to the STL or 3MF file"),
+      },
+      annotations: {
+        title: "Suggest the best print orientation",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
     async ({ file_path }) => {
@@ -22,7 +27,7 @@ export function registerSuggestOrientation(server: McpServer) {
         if (!existsSync(file_path)) {
           return {
             isError: true,
-            content: [{ type: "text" as const, text: `Fichier non trouvé : ${file_path}` }],
+            content: [{ type: "text" as const, text: `File not found: ${file_path}` }],
           };
         }
 
@@ -31,21 +36,21 @@ export function registerSuggestOrientation(server: McpServer) {
         const results = suggestOrientation(mesh);
 
         const lines: string[] = [
-          `## Orientations d'impression — classement`,
+          `## Print orientations, ranked`,
           "",
         ];
 
         for (let i = 0; i < results.length; i++) {
           const r = results[i];
-          const medal = i === 0 ? " **RECOMMANDÉ**" : "";
+          const medal = i === 0 ? " **RECOMMENDED**" : "";
           lines.push(`### ${i + 1}. ${r.name}${medal}`);
-          lines.push(`- **Score** : ${r.score}/100`);
-          lines.push(`- **Overhangs** : ${r.overhangPercent.toFixed(1)}%`);
-          lines.push(`- **Hauteur** : ${r.printHeight.toFixed(1)}mm`);
-          lines.push(`- **Contact plateau** : ${r.bedContact.toFixed(1)}mm²`);
-          lines.push(`- **Supports estimés** : ${r.supportVolume.toFixed(0)}mm³`);
+          lines.push(`- **Score**: ${r.score}/100`);
+          lines.push(`- **Overhangs**: ${r.overhangPercent.toFixed(1)}%`);
+          lines.push(`- **Height**: ${r.printHeight.toFixed(1)}mm`);
+          lines.push(`- **Bed contact**: ${r.bedContact.toFixed(1)}mm²`);
+          lines.push(`- **Estimated supports**: ${r.supportVolume.toFixed(0)}mm³`);
           if (r.rotation.axisX !== 0 || r.rotation.axisY !== 0) {
-            lines.push(`- **Rotation** : X=${r.rotation.axisX}° Y=${r.rotation.axisY}°`);
+            lines.push(`- **Rotation**: X=${r.rotation.axisX}° Y=${r.rotation.axisY}°`);
           }
           lines.push(`- _${r.reasoning}_`);
           lines.push("");
@@ -59,7 +64,7 @@ export function registerSuggestOrientation(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

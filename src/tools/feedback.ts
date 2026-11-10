@@ -20,37 +20,44 @@ export function registerSubmitFeedback(server: McpServer) {
   server.registerTool(
     "submit_feedback",
     {
-      title: "Noter un print",
+      title: "Rate a print",
       description:
-        "Enregistre un retour après impression. Note la qualité, l'adhésion, la solidité, " +
-        "et les problèmes rencontrés. Ces données améliorent les futures recommandations " +
-        "et peuvent être partagées anonymement avec la communauté.",
+        "Records feedback after a print: surface quality, bed adhesion, strength " +
+        "and the issues encountered. This data improves future recommendations " +
+        "and can be exported anonymously to share with the community.",
       inputSchema: {
-        model_name: z.string().describe("Nom du modèle imprimé"),
-        material: z.string().describe("Matériau utilisé (PLA, PETG, ABS...)"),
-        printer: z.string().describe("Nom de l'imprimante"),
-        nozzle: z.number().describe("Diamètre de buse en mm"),
-        goal: z.string().describe("Objectif utilisé (draft, standard, quality, strong)"),
-        layer_height: z.number().describe("Hauteur de couche utilisée en mm"),
-        infill_percent: z.number().describe("Pourcentage de remplissage"),
-        perimeters: z.number().int().describe("Nombre de périmètres"),
-        print_speed: z.number().describe("Vitesse d'impression en mm/s"),
-        nozzle_temp: z.number().describe("Température buse en °C"),
-        bed_temp: z.number().describe("Température plateau en °C"),
-        support_used: z.boolean().describe("Supports utilisés ?"),
-        brim_used: z.boolean().describe("Brim utilisé ?"),
-        quality_score: z.number().min(1).max(5).describe("Qualité de surface (1=terrible, 5=parfait)"),
-        adhesion_score: z.number().min(1).max(5).describe("Adhésion au plateau (1=décollé, 5=parfait)"),
-        strength_score: z.number().min(1).max(5).describe("Solidité perçue (1=fragile, 5=incassable)"),
-        overall_score: z.number().min(1).max(5).describe("Satisfaction globale (1=raté, 5=parfait)"),
+        model_name: z.string().describe("Name of the printed model"),
+        material: z.string().describe("Material used (PLA, PETG, ABS...)"),
+        printer: z.string().describe("Printer name"),
+        nozzle: z.number().describe("Nozzle diameter in mm"),
+        goal: z.string().describe("Goal used (draft, standard, quality, strong)"),
+        layer_height: z.number().describe("Layer height used, in mm"),
+        infill_percent: z.number().describe("Infill percentage"),
+        perimeters: z.number().int().describe("Number of perimeters"),
+        print_speed: z.number().describe("Print speed in mm/s"),
+        nozzle_temp: z.number().describe("Nozzle temperature in °C"),
+        bed_temp: z.number().describe("Bed temperature in °C"),
+        support_used: z.boolean().describe("Were supports used?"),
+        brim_used: z.boolean().describe("Was a brim used?"),
+        quality_score: z.number().min(1).max(5).describe("Surface quality (1=terrible, 5=perfect)"),
+        adhesion_score: z.number().min(1).max(5).describe("Bed adhesion (1=came loose, 5=perfect)"),
+        strength_score: z.number().min(1).max(5).describe("Perceived strength (1=fragile, 5=unbreakable)"),
+        overall_score: z.number().min(1).max(5).describe("Overall satisfaction (1=failed, 5=perfect)"),
         issues: z
           .array(z.string())
           .default([])
           .describe(
-            "Problèmes rencontrés : warping, stringing, under-extrusion, over-extrusion, " +
+            "Issues encountered: warping, stringing, under-extrusion, over-extrusion, " +
             "layer-shift, ringing, blobs, elephants-foot, cracking, poor-bridging, clogging"
           ),
-        notes: z.string().default("").describe("Notes libres sur l'impression"),
+        notes: z.string().default("").describe("Free-form notes about the print"),
+      },
+      annotations: {
+        title: "Rate a print",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
       },
     },
     async (params) => {
@@ -92,14 +99,14 @@ export function registerSubmitFeedback(server: McpServer) {
         );
 
         const lines = [
-          "## Feedback enregistré",
-          `**Modèle** : ${params.model_name} | **Score** : ${params.overall_score}/5`,
-          `**ID** : ${feedback.id}`,
+          "## Feedback saved",
+          `**Model**: ${params.model_name} | **Score**: ${params.overall_score}/5`,
+          `**ID**: ${feedback.id}`,
           "",
         ];
 
         if (params.issues.length > 0) {
-          lines.push(`**Problèmes signalés** : ${params.issues.join(", ")}`);
+          lines.push(`**Reported issues**: ${params.issues.join(", ")}`);
         }
 
         // Learn and suggest
@@ -107,8 +114,8 @@ export function registerSubmitFeedback(server: McpServer) {
         const adjustments = learnFromFeedback(allFeedback, params.material, params.printer);
         if (adjustments.warnings.length > 0) {
           lines.push("");
-          lines.push("### Apprentissage automatique");
-          lines.push("_Basé sur ton historique de prints :_");
+          lines.push("### Automatic learning");
+          lines.push("_Based on your print history:_");
           for (const w of adjustments.warnings) {
             lines.push(`- ${w}`);
           }
@@ -116,18 +123,18 @@ export function registerSubmitFeedback(server: McpServer) {
 
         if (insight.hasData && insight.sampleCount > 0) {
           lines.push("");
-          lines.push(`### Données communautaires (${insight.sampleCount} prints similaires)`);
+          lines.push(`### Community data (${insight.sampleCount} similar prints)`);
           if (insight.communityScore) {
-            lines.push(`- Score moyen communauté : ${insight.communityScore.toFixed(1)}/5`);
+            lines.push(`- Community average score: ${insight.communityScore.toFixed(1)}/5`);
           }
           if (insight.commonIssues.length > 0) {
-            lines.push(`- Problèmes fréquents : ${insight.commonIssues.join(", ")}`);
+            lines.push(`- Common issues: ${insight.commonIssues.join(", ")}`);
           }
         }
 
         lines.push("");
-        lines.push("_Ce feedback sera utilisé pour améliorer les recommandations futures._");
-        lines.push("_Utilise `export_feedback` pour partager anonymement avec la communauté._");
+        lines.push("_This feedback will be used to improve future recommendations._");
+        lines.push("_Use `export_feedback` to share it anonymously with the community._");
 
         return {
           content: [{ type: "text" as const, text: lines.join("\n") }],
@@ -137,7 +144,7 @@ export function registerSubmitFeedback(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }
@@ -151,13 +158,18 @@ export function registerFeedbackStats(server: McpServer) {
   server.registerTool(
     "feedback_stats",
     {
-      title: "Statistiques de prints",
+      title: "Print statistics",
       description:
-        "Affiche les statistiques de tes impressions : taux de réussite, " +
-        "score moyen, problèmes fréquents, et meilleurs paramètres par matériau. " +
-        "Combine tes données locales et les données communautaires.",
+        "Shows statistics for your prints: success rate, " +
+        "average scores, common issues and the best settings per material. " +
+        "Combines your local data with the community data.",
       inputSchema: {
-        material: z.string().optional().describe("Filtrer par matériau"),
+        material: z.string().optional().describe("Filter by material"),
+      },
+      annotations: {
+        title: "Print statistics",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
     async ({ material }) => {
@@ -173,40 +185,40 @@ export function registerFeedbackStats(server: McpServer) {
         const community = await loadCommunityData();
 
         const lines = [
-          "## Statistiques d'impression",
+          "## Print statistics",
           "",
         ];
 
         if (stats.totalPrints === 0) {
-          lines.push("Aucun print enregistré. Utilise `submit_feedback` après une impression.");
+          lines.push("No prints recorded yet. Use `submit_feedback` after a print.");
           lines.push("");
-          lines.push(`### Données communautaires (${community.totalPrints} prints)`);
+          lines.push(`### Community data (${community.totalPrints} prints)`);
           if (community.insights.bestPractices.length > 0) {
-            lines.push("**Bonnes pratiques :**");
+            lines.push("**Best practices:**");
             for (const bp of community.insights.bestPractices) {
-              lines.push(`- ${bp.recommendation} _(confiance: ${Math.round(bp.confidence * 100)}%)_`);
+              lines.push(`- ${bp.recommendation} _(confidence: ${Math.round(bp.confidence * 100)}%)_`);
             }
           }
         } else {
-          lines.push(`**Total prints** : ${stats.totalPrints}`);
-          lines.push(`**Taux de réussite** : ${stats.successRate.toFixed(0)}%`);
-          lines.push(`**Score qualité moyen** : ${stats.avgQuality.toFixed(1)}/5`);
-          lines.push(`**Score adhésion moyen** : ${stats.avgAdhesion.toFixed(1)}/5`);
-          lines.push(`**Score solidité moyen** : ${stats.avgStrength.toFixed(1)}/5`);
+          lines.push(`**Total prints**: ${stats.totalPrints}`);
+          lines.push(`**Success rate**: ${stats.successRate.toFixed(0)}%`);
+          lines.push(`**Average quality score**: ${stats.avgQuality.toFixed(1)}/5`);
+          lines.push(`**Average adhesion score**: ${stats.avgAdhesion.toFixed(1)}/5`);
+          lines.push(`**Average strength score**: ${stats.avgStrength.toFixed(1)}/5`);
           lines.push("");
 
           if (stats.commonIssues.length > 0) {
-            lines.push("### Problèmes fréquents");
+            lines.push("### Common issues");
             for (const issue of stats.commonIssues.slice(0, 5)) {
-              lines.push(`- **${issue.issue}** : ${issue.count}× (${issue.percent.toFixed(0)}% des prints)`);
+              lines.push(`- **${issue.issue}**: ${issue.count}× (${issue.percent.toFixed(0)}% of prints)`);
             }
             lines.push("");
           }
 
           if (stats.bestSettings.length > 0) {
-            lines.push("### Meilleurs paramètres par matériau");
+            lines.push("### Best settings per material");
             for (const s of stats.bestSettings) {
-              lines.push(`- **${s.material}** : layer ${s.layerHeight}mm → score ${s.avgScore}/5 (${s.count} prints)`);
+              lines.push(`- **${s.material}**: layer ${s.layerHeight}mm → score ${s.avgScore}/5 (${s.count} prints)`);
             }
           }
         }
@@ -219,7 +231,7 @@ export function registerFeedbackStats(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }
@@ -233,13 +245,18 @@ export function registerExportFeedback(server: McpServer) {
   server.registerTool(
     "export_feedback",
     {
-      title: "Exporter le feedback pour la communauté",
+      title: "Export feedback for the community",
       description:
-        "Exporte tes retours d'impression de manière anonymisée pour contribuer " +
-        "à la base de connaissances communautaire. Supprime les chemins de fichiers " +
-        "et généralise le nom d'imprimante. Le JSON résultant peut être partagé " +
-        "via GitHub PR ou autre canal.",
+        "Exports your print feedback in anonymized form to contribute " +
+        "to the community knowledge base. Strips file paths " +
+        "and generalizes the printer name. The resulting JSON is returned as text " +
+        "and can be shared via a GitHub PR or another channel; nothing is written or sent.",
       inputSchema: {},
+      annotations: {
+        title: "Export feedback for the community",
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       try {
@@ -249,7 +266,7 @@ export function registerExportFeedback(server: McpServer) {
           return {
             content: [{
               type: "text" as const,
-              text: "Aucun feedback à exporter. Imprime d'abord et note tes résultats !",
+              text: "No feedback to export. Print something and rate it with `submit_feedback` first.",
             }],
           };
         }
@@ -264,21 +281,21 @@ export function registerExportFeedback(server: McpServer) {
         const json = JSON.stringify(exportData, null, 2);
 
         const lines = [
-          "## Export communautaire prêt",
-          `**Prints exportés** : ${anonymized.length}`,
+          "## Community export ready",
+          `**Exported prints**: ${anonymized.length}`,
           "",
-          "Données anonymisées (pas de chemins, pas de noms exacts) :",
+          "Anonymized data (no file paths, no exact names):",
           "",
           "```json",
           json,
           "```",
           "",
-          "Pour contribuer :",
-          "1. Copie le JSON ci-dessus",
-          "2. Ouvre une PR sur le repo PrusaMCP",
-          "3. Ajoute tes données dans `community-contributions/`",
+          "To contribute:",
+          "1. Copy the JSON above",
+          "2. Open a PR on the PrusaMCP repo",
+          "3. Add your data under `community-contributions/`",
           "",
-          "_Merci de contribuer à l'amélioration des recommandations pour tout le monde !_",
+          "_Thanks for helping improve the recommendations for everyone._",
         ];
 
         return {
@@ -289,7 +306,7 @@ export function registerExportFeedback(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

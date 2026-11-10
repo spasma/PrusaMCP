@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { isBgcode, readBgcodeMetadata } from "./bgcode.js";
 import type { PrusaConfig, CliResult, GCodeStats } from "./types.js";
 
 const DEFAULT_TIMEOUT = 300_000; // 5 minutes
@@ -44,47 +45,59 @@ export function runPrusaSlicer(
 }
 
 /**
- * Parse G-code file for slicing statistics (embedded as comments by PrusaSlicer).
+ * Slicing statistics from a G-code file: comment lines in ASCII G-code,
+ * metadata blocks in binary G-code (.bgcode, which Prusa printer profiles like the CORE One produce).
  */
 export async function parseGCodeStats(gcodePath: string): Promise<GCodeStats> {
-  const content = await readFile(gcodePath, "utf-8");
-  const stats: GCodeStats = {};
+  const buf = await readFile(gcodePath);
+  return isBgcode(buf) ? statsFromBgcode(buf) : statsFromAscii(buf.toString("utf-8"));
+}
 
-  const timeMatch = content.match(
-    /;\s*estimated printing time \(normal mode\)\s*=\s*(.+)/i,
-  );
-  if (timeMatch) {
-    stats.estimatedTime = timeMatch[1].trim();
-    stats.estimatedTimeSeconds = parseTimeToSeconds(timeMatch[1].trim());
+function statsFromBgcode(buf: Buffer): GCodeStats {
+  const meta = readBgcodeMetadata(buf);
+  const get = (key: string) => meta.print.get(key) ?? meta.printer.get(key);
+  const num = (key: string) => {
+    const value = get(key);
+    return value !== undefined && value !== "" ? parseFloat(value) : undefined;
+  };
+
+  const stats: GCodeStats = { format: "binary" };
+  stats.printerModel = meta.printer.get("printer_model") || undefined;
+  const time = get("estimated printing time (normal mode)");
+  if (time) {
+    stats.estimatedTime = time;
+    stats.estimatedTimeSeconds = parseTimeToSeconds(time);
+  }
+  stats.filamentUsedMm = num("filament used [mm]");
+  stats.filamentUsedG = num("total filament used [g]") ?? num("filament used [g]");
+  stats.filamentCost = num("total filament cost") ?? num("filament cost");
+  return stats;
+}
+
+function statsFromAscii(content: string): GCodeStats {
+  const stats: GCodeStats = { format: "ascii" };
+  const match = (regex: RegExp) => content.match(regex)?.[1]?.trim();
+
+  // [ \t] rather than \s: an empty value must not run into the next line.
+  stats.printerModel = match(/^;[ \t]*printer_model[ \t]*=[ \t]*(.*)$/m) || undefined;
+
+  const time = match(/;\s*estimated printing time \(normal mode\)\s*=\s*(.+)/i);
+  if (time) {
+    stats.estimatedTime = time;
+    stats.estimatedTimeSeconds = parseTimeToSeconds(time);
   }
 
-  const filamentMmMatch = content.match(
-    /;\s*filament used \[mm\]\s*=\s*([\d.]+)/i,
-  );
-  if (filamentMmMatch) {
-    stats.filamentUsedMm = parseFloat(filamentMmMatch[1]);
-  }
+  const mm = match(/;\s*filament used \[mm\]\s*=\s*([\d.]+)/i);
+  if (mm) stats.filamentUsedMm = parseFloat(mm);
 
-  const filamentGMatch = content.match(
-    /;\s*total filament used \[g\]\s*=\s*([\d.]+)/i,
-  );
-  if (filamentGMatch) {
-    stats.filamentUsedG = parseFloat(filamentGMatch[1]);
-  }
+  const grams = match(/;\s*total filament used \[g\]\s*=\s*([\d.]+)/i) ?? match(/;\s*filament used \[g\]\s*=\s*([\d.]+)/i);
+  if (grams) stats.filamentUsedG = parseFloat(grams);
 
-  const costMatch = content.match(
-    /;\s*total filament cost\s*=\s*([\d.]+)/i,
-  );
-  if (costMatch) {
-    stats.filamentCost = parseFloat(costMatch[1]);
-  }
+  const cost = match(/;\s*total filament cost\s*=\s*([\d.]+)/i);
+  if (cost) stats.filamentCost = parseFloat(cost);
 
-  const layerMatch = content.match(
-    /;\s*total layers count\s*=\s*(\d+)/i,
-  );
-  if (layerMatch) {
-    stats.layerCount = parseInt(layerMatch[1], 10);
-  }
+  const layers = match(/;\s*total layers count\s*=\s*(\d+)/i);
+  if (layers) stats.layerCount = parseInt(layers, 10);
 
   return stats;
 }

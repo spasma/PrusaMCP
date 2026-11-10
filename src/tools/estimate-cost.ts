@@ -10,20 +10,25 @@ export function registerEstimateCost(server: McpServer) {
   server.registerTool(
     "estimate_cost",
     {
-      title: "Estimer le coût d'impression",
+      title: "Estimate print cost",
       description:
-        "Estime le coût d'impression d'un modèle 3D : filament, électricité, temps. " +
-        "Peut aussi comparer plusieurs profils (draft/standard/quality) côte à côte.",
+        "Estimates the print cost of a 3D model: filament, electricity and time. " +
+        "Can also compare several profiles (draft/standard/quality) side by side.",
       inputSchema: {
-        file_path: z.string().describe("Chemin absolu vers le fichier STL ou 3MF"),
-        material: z.string().default("PLA").describe("Matériau (PLA, PETG, ABS...)"),
-        nozzle: z.number().default(0.4).describe("Diamètre de buse en mm"),
-        filament_price_per_kg: z.number().default(22).describe("Prix du filament en EUR/kg"),
-        electricity_price: z.number().default(0.25).describe("Prix électricité en EUR/kWh"),
+        file_path: z.string().describe("Absolute path to the STL or 3MF file"),
+        material: z.string().default("PLA").describe("Material (PLA, PETG, ABS...)"),
+        nozzle: z.number().default(0.4).describe("Nozzle diameter in mm"),
+        filament_price_per_kg: z.number().default(22).describe("Filament price in EUR/kg"),
+        electricity_price: z.number().default(0.25).describe("Electricity price in EUR/kWh"),
         compare_profiles: z
           .boolean()
           .default(true)
-          .describe("Comparer draft/standard/quality côte à côte"),
+          .describe("Compare draft/standard/quality side by side"),
+      },
+      annotations: {
+        title: "Estimate print cost",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
     async ({ file_path, material, nozzle, filament_price_per_kg, electricity_price, compare_profiles }) => {
@@ -31,7 +36,7 @@ export function registerEstimateCost(server: McpServer) {
         if (!existsSync(file_path)) {
           return {
             isError: true,
-            content: [{ type: "text" as const, text: `Fichier non trouvé : ${file_path}` }],
+            content: [{ type: "text" as const, text: `File not found: ${file_path}` }],
           };
         }
 
@@ -57,9 +62,9 @@ export function registerEstimateCost(server: McpServer) {
             layerH: number;
           }> = [];
 
-          lines.push("## Comparaison des profils");
-          lines.push(`**Modèle** : ${mesh.name} | **Matériau** : ${material} | **Buse** : ${nozzle}mm`);
-          lines.push(`**Prix filament** : ${filament_price_per_kg}€/kg | **Électricité** : ${electricity_price}€/kWh`);
+          lines.push("## Profile comparison");
+          lines.push(`**Model**: ${mesh.name} | **Material**: ${material} | **Nozzle**: ${nozzle}mm`);
+          lines.push(`**Filament price**: ${filament_price_per_kg}€/kg | **Electricity**: ${electricity_price}€/kWh`);
           lines.push("");
 
           for (const goal of goals) {
@@ -83,8 +88,8 @@ export function registerEstimateCost(server: McpServer) {
           }
 
           // Table
-          lines.push("| Profil | Layer | Temps | Filament | Coût total |");
-          lines.push("|--------|-------|-------|----------|------------|");
+          lines.push("| Profile | Layer | Time | Filament | Total cost |");
+          lines.push("|---------|-------|------|----------|------------|");
           for (const c of comparisons) {
             lines.push(`| **${c.name}** | ${c.layerH}mm | ${c.time} | ${c.filament} | ${c.cost} |`);
           }
@@ -94,7 +99,7 @@ export function registerEstimateCost(server: McpServer) {
             const fastest = comparisons[0];
             const slowest = comparisons[comparisons.length - 1];
             lines.push("");
-            lines.push(`**Économie draft vs strong** : ${slowest.cost} → ${fastest.cost} en passant de ${slowest.time} à ${fastest.time}`);
+            lines.push(`**Savings, draft vs strong**: ${slowest.cost} → ${fastest.cost}, ${slowest.time} down to ${fastest.time}`);
           }
         } else {
           // Single profile estimate
@@ -108,12 +113,12 @@ export function registerEstimateCost(server: McpServer) {
             analysis, lh, infill, perimeters, speed, material, params,
           );
 
-          lines.push("## Estimation de coût");
-          lines.push(`**Temps** : ${estimate.printTimeFormatted}`);
-          lines.push(`**Filament** : ${estimate.filamentWeightG}g (${estimate.filamentLengthMm.toFixed(0)}mm)`);
-          lines.push(`**Coût filament** : ${estimate.filamentCostEur}€`);
-          lines.push(`**Coût électricité** : ${estimate.electricityCostEur}€`);
-          lines.push(`**Coût total** : ${estimate.totalCostEur}€`);
+          lines.push("## Cost estimate");
+          lines.push(`**Time**: ${estimate.printTimeFormatted}`);
+          lines.push(`**Filament**: ${estimate.filamentWeightG}g (${estimate.filamentLengthMm.toFixed(0)}mm)`);
+          lines.push(`**Filament cost**: ${estimate.filamentCostEur}€`);
+          lines.push(`**Electricity cost**: ${estimate.electricityCostEur}€`);
+          lines.push(`**Total cost**: ${estimate.totalCostEur}€`);
         }
 
         return {
@@ -124,7 +129,7 @@ export function registerEstimateCost(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

@@ -10,34 +10,40 @@ export function registerRecommendProfile(server: McpServer) {
   server.registerTool(
     "recommend_profile",
     {
-      title: "Recommander un profil d'impression",
+      title: "Recommend a print profile",
       description:
-        "Génère un profil d'impression complet avec justification pour chaque paramètre. " +
-        "Prend en compte l'intention (prototype rapide, beau rendu, solide...), " +
-        "la buse, le matériau, et optionnellement une analyse mesh.",
+        "Generates a complete print profile with a reason for every setting. " +
+        "Takes the goal (draft, quality, strong...), the nozzle, the material " +
+        "and, optionally, a mesh analysis into account.",
       inputSchema: {
         printer: z
           .string()
           .default("Generic")
-          .describe("Nom de l'imprimante (ex: MK4S, MINI, CR30, Ender3)"),
+          .describe("Printer name (e.g. MK4S, MINI, CR30, Ender3)"),
         nozzle: z
           .number()
           .default(0.4)
-          .describe("Diamètre de buse en mm (ex: 0.4, 0.6, 0.8, 1.0)"),
+          .describe("Nozzle diameter in mm (e.g. 0.4, 0.6, 0.8, 1.0)"),
         goal: z
           .string()
           .describe(
-            "Intention d'impression : 'prototype rapide', 'standard', 'beau rendu', " +
-            "'production solide', 'vase', 'speedrun', ou toute description libre"
+            "Print goal: 'draft', 'standard', 'quality', 'strong', 'vase' or 'speed'. " +
+            "Aliases such as 'fast', 'fine', 'robust', 'spiral' and the French 'prototype rapide', " +
+            "'beau rendu', 'production solide' also work; anything else falls back to 'standard'"
           ),
         material: z
           .string()
           .default("PLA")
-          .describe("Matériau : PLA, PETG, ABS, ASA, TPU, NYLON, PC"),
+          .describe("Material: PLA, PETG, ABS, ASA, TPU, NYLON, PC"),
         stl_path: z
           .string()
           .optional()
-          .describe("Chemin optionnel vers un STL pour analyse automatique (overhangs, détails, taille)"),
+          .describe("Optional path to an STL for automatic analysis (overhangs, details, size)"),
+      },
+      annotations: {
+        title: "Recommend a print profile",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
     async ({ printer, nozzle, goal, material, stl_path }) => {
@@ -55,22 +61,22 @@ export function registerRecommendProfile(server: McpServer) {
 
         // Format output
         const lines = [
-          `## Profil recommandé`,
-          `**Imprimante** : ${profile.printer} | **Buse** : ${profile.nozzle}mm | **Matériau** : ${profile.material}`,
-          `**Objectif** : ${profile.goal}`,
+          `## Recommended profile`,
+          `**Printer**: ${profile.printer} | **Nozzle**: ${profile.nozzle}mm | **Material**: ${profile.material}`,
+          `**Goal**: ${profile.goal}`,
           "",
         ];
 
         // Settings with justifications
         const categories: Record<string, string[]> = {
-          "Couches & Dimensions": ["layer_height", "line_width"],
-          "Parois & Remplissage": ["perimeters", "infill_density", "fill_pattern"],
-          "Températures": ["nozzle_temperature", "first_layer_nozzle_temperature", "bed_temperature", "first_layer_bed_temperature"],
-          "Vitesses & Débit": ["print_speed", "travel_speed", "first_layer_speed", "max_volumetric_speed"],
-          "Supports & Adhésion": ["support_material", "support_material_style", "support_material_contact_distance", "brim_width"],
-          "Refroidissement": ["fan_speed", "min_fan_speed", "bridge_fan_speed", "min_layer_time"],
-          "Rétraction & Extrusion": ["retraction_length", "retraction_speed", "extrusion_multiplier"],
-          "Dynamique": ["acceleration"],
+          "Layers & dimensions": ["layer_height", "line_width"],
+          "Walls & infill": ["perimeters", "infill_density", "fill_pattern"],
+          "Temperatures": ["nozzle_temperature", "first_layer_nozzle_temperature", "bed_temperature", "first_layer_bed_temperature"],
+          "Speed & flow": ["print_speed", "travel_speed", "first_layer_speed", "max_volumetric_speed"],
+          "Supports & adhesion": ["support_material", "support_material_style", "support_material_contact_distance", "brim_width"],
+          "Cooling": ["fan_speed", "min_fan_speed", "bridge_fan_speed", "min_layer_time"],
+          "Retraction & extrusion": ["retraction_length", "retraction_speed", "extrusion_multiplier"],
+          "Motion": ["acceleration"],
         };
 
         for (const [category, keys] of Object.entries(categories)) {
@@ -79,7 +85,7 @@ export function registerRecommendProfile(server: McpServer) {
             const setting = profile.settings[key as keyof typeof profile.settings];
             if (setting) {
               const displayKey = key.replace(/_/g, " ");
-              lines.push(`- **${displayKey}** : \`${setting.value}\``);
+              lines.push(`- **${displayKey}**: \`${setting.value}\``);
               lines.push(`  _${setting.reason}_`);
             }
           }
@@ -88,7 +94,7 @@ export function registerRecommendProfile(server: McpServer) {
 
         // Warnings
         if (profile.warnings.length > 0) {
-          lines.push("### Avertissements");
+          lines.push("### Warnings");
           for (const w of profile.warnings) {
             lines.push(`- ⚠ ${w}`);
           }
@@ -98,11 +104,11 @@ export function registerRecommendProfile(server: McpServer) {
         // Mesh context if available
         if (meshAnalysis) {
           const bb = meshAnalysis.boundingBox;
-          lines.push("### Contexte mesh");
-          lines.push(`- Dimensions : ${bb.size.x.toFixed(1)} × ${bb.size.y.toFixed(1)} × ${bb.size.z.toFixed(1)} mm`);
-          lines.push(`- Volume : ${(meshAnalysis.volume / 1000).toFixed(2)} cm³`);
-          lines.push(`- Overhangs : ${meshAnalysis.overhangPercent.toFixed(1)}%`);
-          lines.push(`- Manifold : ${meshAnalysis.isManifold ? "Oui" : "Non"}`);
+          lines.push("### Mesh context");
+          lines.push(`- Dimensions: ${bb.size.x.toFixed(1)} × ${bb.size.y.toFixed(1)} × ${bb.size.z.toFixed(1)} mm`);
+          lines.push(`- Volume: ${(meshAnalysis.volume / 1000).toFixed(2)} cm³`);
+          lines.push(`- Overhangs: ${meshAnalysis.overhangPercent.toFixed(1)}%`);
+          lines.push(`- Manifold: ${meshAnalysis.isManifold ? "Yes" : "No"}`);
         }
 
         return {
@@ -113,7 +119,7 @@ export function registerRecommendProfile(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur de recommandation : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Recommendation error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

@@ -1,11 +1,12 @@
 import type { Triangle, Vec3, MeshAnalysis } from "./types.js";
+import { computeNormal, isOnBed, minZ, triangleArea } from "./geometry.js";
 
 export interface PrintIssue {
   severity: "error" | "warning" | "info";
   category: string;
   message: string;
   detail?: string;
-  bibleFdmRef?: string;  // Reference to Bible FDM diagnostic
+  bibleFdmRef?: string;  // Reference to FDM Bible diagnostic
 }
 
 export interface DefectDiagnosis {
@@ -19,7 +20,7 @@ export interface PrintabilityReport {
   score: number; // 0-100, higher = more printable
   issues: PrintIssue[];
   summary: string;
-  diagnosticHints?: DefectDiagnosis[];  // Bible FDM based hints
+  diagnosticHints?: DefectDiagnosis[];  // FDM Bible based hints
 }
 
 /**
@@ -37,8 +38,8 @@ export function detectPrintIssues(
     issues.push({
       severity: "error",
       category: "Mesh",
-      message: `Mesh non-manifold : ${analysis.nonManifoldEdges} arêtes ouvertes`,
-      detail: "Le slicer peut mal interpréter l'intérieur/extérieur. Réparer avec PrusaSlicer ou Meshmixer.",
+      message: `Non-manifold mesh: ${analysis.nonManifoldEdges} open edges`,
+      detail: "The slicer may misread inside/outside. Repair in PrusaSlicer or Meshmixer.",
     });
   }
 
@@ -49,8 +50,8 @@ export function detectPrintIssues(
     issues.push({
       severity: degenerateCount > triangles.length * 0.01 ? "warning" : "info",
       category: "Mesh",
-      message: `${degenerateCount} triangles dégénérés (${pct}%)`,
-      detail: "Triangles d'aire nulle — peuvent causer des artefacts de slicing.",
+      message: `${degenerateCount} degenerate triangles (${pct}%)`,
+      detail: "Zero-area triangles; can cause slicing artifacts.",
     });
   }
 
@@ -59,30 +60,30 @@ export function detectPrintIssues(
   if (thinWalls.hasThinWalls) {
     issues.push({
       severity: "warning",
-      category: "Murs fins",
-      message: `Sections potentiellement trop fines pour une buse de ${nozzleDiameter}mm`,
-      detail: `La dimension minimale détectée est ~${thinWalls.minThickness.toFixed(2)}mm. ` +
-        `Minimum recommandé : ${(nozzleDiameter * 1.2).toFixed(2)}mm (1.2× buse). ` +
-        `${thinWalls.thinRegions} zones concernées.`,
+      category: "Thin walls",
+      message: `Sections possibly too thin for a ${nozzleDiameter}mm nozzle`,
+      detail: `Smallest detected dimension is ~${thinWalls.minThickness.toFixed(2)}mm. ` +
+        `Recommended minimum: ${(nozzleDiameter * 1.2).toFixed(2)}mm (1.2× nozzle). ` +
+        `${thinWalls.thinRegions} affected regions.`,
     });
   }
 
-  // 4. Overhang analysis (Bible FDM: overhang>30% → supports nécessaires)
+  // 4. Overhang analysis (FDM Bible: overhang>30% → supports needed)
   if (analysis.overhangPercent > 30) {
     issues.push({
       severity: "warning",
       category: "Overhangs",
-      message: `${analysis.overhangPercent.toFixed(1)}% de faces en overhang sévère`,
-      detail: "Beaucoup d'overhangs — supports nécessaires ou réorientation de la pièce recommandée.",
-      bibleFdmRef: "Support Z contact distance = 50-75% hauteur de couche. Styles : Grid/Snug/Organic.",
+      message: `${analysis.overhangPercent.toFixed(1)}% of faces are steep overhangs`,
+      detail: "Many overhangs; supports needed, or reorient the part.",
+      bibleFdmRef: "Support Z contact distance = 50-75% of layer height. Styles: Grid/Snug/Organic.",
     });
   } else if (analysis.overhangPercent > 5) {
     issues.push({
       severity: "info",
       category: "Overhangs",
-      message: `${analysis.overhangPercent.toFixed(1)}% d'overhangs modérés`,
-      detail: "Supports recommandés pour les zones concernées.",
-      bibleFdmRef: "Bible FDM : PrusaSlicer propose Grid, Snug et Organic. Top contact Z distance = 50-75% layer height.",
+      message: `${analysis.overhangPercent.toFixed(1)}% moderate overhangs`,
+      detail: "Supports recommended for the affected areas.",
+      bibleFdmRef: "PrusaSlicer offers Grid, Snug and Organic. Top contact Z distance = 50-75% of layer height.",
     });
   }
 
@@ -92,11 +93,11 @@ export function detectPrintIssues(
     const severity = bridges.maxBridgeLength > 20 ? "warning" : "info";
     issues.push({
       severity,
-      category: "Ponts",
-      message: `Pont le plus long détecté : ~${bridges.maxBridgeLength.toFixed(1)}mm`,
+      category: "Bridges",
+      message: `Longest detected bridge: ~${bridges.maxBridgeLength.toFixed(1)}mm`,
       detail: bridges.maxBridgeLength > 20
-        ? "Ponts >20mm risquent de s'affaisser. Réduire la vitesse de pont ou ajouter des supports."
-        : "Ponts courts — devrait être OK avec un bon refroidissement.",
+        ? "Bridges >20mm may sag. Lower the bridge speed or add supports."
+        : "Short bridges; should be fine with good cooling.",
     });
   }
 
@@ -105,10 +106,10 @@ export function detectPrintIssues(
     const minFeatureSize = nozzleDiameter * 0.8;
     issues.push({
       severity: "info",
-      category: "Détails fins",
-      message: `Détails fins détectés (${analysis.smallDetailPercent.toFixed(1)}% de petits triangles)`,
-      detail: `Des features plus petites que ~${minFeatureSize.toFixed(1)}mm pourraient ne pas être imprimées correctement. ` +
-        `Considérer un layer height plus fin.`,
+      category: "Fine details",
+      message: `Fine details detected (${analysis.smallDetailPercent.toFixed(1)}% small triangles)`,
+      detail: `Features smaller than ~${minFeatureSize.toFixed(1)}mm may not print correctly. ` +
+        `Consider a lower layer height.`,
     });
   }
 
@@ -117,9 +118,9 @@ export function detectPrintIssues(
   if (bb.x < 1 || bb.y < 1 || bb.z < 0.5) {
     issues.push({
       severity: "warning",
-      category: "Taille",
-      message: `Pièce très petite : ${bb.x.toFixed(1)} × ${bb.y.toFixed(1)} × ${bb.z.toFixed(1)}mm`,
-      detail: "Les pièces très petites sont difficiles à imprimer — adhésion au plateau et détails compromis.",
+      category: "Size",
+      message: `Very small part: ${bb.x.toFixed(1)} × ${bb.y.toFixed(1)} × ${bb.z.toFixed(1)}mm`,
+      detail: "Very small parts are hard to print; bed adhesion and detail suffer.",
     });
   }
 
@@ -128,9 +129,9 @@ export function detectPrintIssues(
   if (bb.z > 3 * maxXY && bb.z > 30) {
     issues.push({
       severity: "warning",
-      category: "Stabilité",
-      message: `Pièce haute et étroite (ratio ${(bb.z / maxXY).toFixed(1)}:1)`,
-      detail: "Risque de décollement ou bascule. Utiliser un brim large ou un raft.",
+      category: "Stability",
+      message: `Tall, narrow part (ratio ${(bb.z / maxXY).toFixed(1)}:1)`,
+      detail: "Risk of detaching or tipping over. Use a wide brim or a raft.",
     });
   }
 
@@ -139,9 +140,9 @@ export function detectPrintIssues(
   if (bottomFaces.flatBottomPercent < 5 && triangles.length > 100) {
     issues.push({
       severity: "info",
-      category: "Adhésion",
-      message: "Très peu de surface de contact avec le plateau",
-      detail: `Seulement ${bottomFaces.flatBottomPercent.toFixed(1)}% de faces au contact du plateau. Brim recommandé.`,
+      category: "Adhesion",
+      message: "Very little contact area with the bed",
+      detail: `Only ${bottomFaces.flatBottomPercent.toFixed(1)}% of faces touch the bed. Brim recommended.`,
     });
   }
 
@@ -159,14 +160,14 @@ export function detectPrintIssues(
   const warnCount = issues.filter((i) => i.severity === "warning").length;
   let summary: string;
   if (errorCount > 0) {
-    summary = `Problèmes critiques détectés (${errorCount} erreur(s)). Correction nécessaire avant impression.`;
+    summary = `Critical problems detected (${errorCount} error(s)). Fix before printing.`;
   } else if (warnCount > 0) {
-    summary = `Imprimable avec précautions (${warnCount} avertissement(s)). Vérifier les paramètres.`;
+    summary = `Printable with care (${warnCount} warning(s)). Check the settings.`;
   } else {
-    summary = "Bonne printabilité. Aucun problème majeur détecté.";
+    summary = "Good printability. No major problems detected.";
   }
 
-  // Generate Bible FDM diagnostic hints based on detected issues
+  // Generate FDM Bible diagnostic hints based on detected issues
   const diagnosticHints = generateDiagnosticHints(issues);
 
   return { score, issues, summary, diagnosticHints };
@@ -181,15 +182,6 @@ function countDegenerateTriangles(triangles: Triangle[]): number {
     if (area < 1e-10) count++;
   }
   return count;
-}
-
-function triangleArea(v1: Vec3, v2: Vec3, v3: Vec3): number {
-  const ax = v2.x - v1.x, ay = v2.y - v1.y, az = v2.z - v1.z;
-  const bx = v3.x - v1.x, by = v3.y - v1.y, bz = v3.z - v1.z;
-  const cx = ay * bz - az * by;
-  const cy = az * bx - ax * bz;
-  const cz = ax * by - ay * bx;
-  return Math.sqrt(cx * cx + cy * cy + cz * cz) / 2;
 }
 
 /**
@@ -290,12 +282,13 @@ function detectBridges(
   let bridgeCount = 0;
 
   // Find nearly horizontal faces that are overhangs (normal pointing down)
-  // These are potential bridge surfaces
+  // These are potential bridge surfaces; faces on the bed are not.
+  const bedZ = minZ(triangles);
   for (const t of triangles) {
     const normal = computeNormal(t.v1, t.v2, t.v3);
 
     // Nearly horizontal face pointing down = potential bridge
-    if (normal.z < -0.9) {
+    if (normal.z < -0.9 && !isOnBed(t, bedZ)) {
       // Compute the span of this face in XY
       const xSpan = Math.max(t.v1.x, t.v2.x, t.v3.x) - Math.min(t.v1.x, t.v2.x, t.v3.x);
       const ySpan = Math.max(t.v1.y, t.v2.y, t.v3.y) - Math.min(t.v1.y, t.v2.y, t.v3.y);
@@ -343,109 +336,98 @@ function countBottomFaces(
   };
 }
 
-function computeNormal(v1: Vec3, v2: Vec3, v3: Vec3): Vec3 {
-  const ax = v2.x - v1.x, ay = v2.y - v1.y, az = v2.z - v1.z;
-  const bx = v3.x - v1.x, by = v3.y - v1.y, bz = v3.z - v1.z;
-  const nx = ay * bz - az * by;
-  const ny = az * bx - ax * bz;
-  const nz = ax * by - ay * bx;
-  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-  if (len === 0) return { x: 0, y: 0, z: 1 };
-  return { x: nx / len, y: ny / len, z: nz / len };
-}
-
-// ─── Bible FDM Diagnostic Hints ─────────────────────────────
+// ─── FDM Bible Diagnostic Hints ─────────────────────────────
 
 /**
- * Bible FDM defect diagnostic database.
+ * FDM Bible defect diagnostic database.
  * Maps mesh-detected issues to likely print defects and their fixes.
  */
 const BIBLE_FDM_DIAGNOSTICS: DefectDiagnosis[] = [
   {
-    defect: "Warping potentiel",
-    symptoms: ["Pièce haute et étroite", "Matériau ABS/ASA/PC/Nylon", "Grande surface de contact"],
-    causes: ["Temp/adhésion insuffisantes", "Courants d'air", "Matériaux techniques sans enceinte"],
+    defect: "Potential warping",
+    symptoms: ["Tall, narrow part", "ABS/ASA/PC/Nylon material", "Large contact area"],
+    causes: ["Insufficient temperature/adhesion", "Drafts", "Engineering materials without an enclosure"],
     fixes: [
-      "Enceinte fermée si ABS/ASA/PC/Nylon",
+      "Closed enclosure for ABS/ASA/PC/Nylon",
       "Brim 5mm+ minimum",
-      "Temp bed adéquate (ABS:100°C, PETG:85°C)",
-      "Surface propre (IPA/eau selon sheet et matériau)",
+      "Adequate bed temp (ABS:100°C, PETG:85°C)",
+      "Clean surface (IPA/water depending on sheet and material)",
     ],
   },
   {
-    defect: "Problèmes d'overhangs",
-    symptoms: ["Faces en surplomb >45°", "Surfaces mal formées dessous"],
-    causes: ["Overhang trop raide sans support", "Refroidissement insuffisant"],
+    defect: "Overhang problems",
+    symptoms: ["Overhanging faces >45°", "Poorly formed undersides"],
+    causes: ["Overhang too steep without support", "Insufficient cooling"],
     fixes: [
-      "Ajouter supports (Grid/Snug/Organic dans PrusaSlicer)",
-      "Support Z contact = 50-75% de la hauteur de couche",
-      "Réorienter la pièce pour minimiser les overhangs",
-      "Augmenter le refroidissement (sauf ABS/ASA)",
+      "Add supports (Grid/Snug/Organic in PrusaSlicer)",
+      "Support Z contact = 50-75% of layer height",
+      "Reorient the part to minimize overhangs",
+      "Increase cooling (except ABS/ASA)",
     ],
   },
   {
-    defect: "Ponts fragiles",
-    symptoms: ["Affaissement sur ponts longs", "Fils/cordes sur bridges"],
-    causes: ["Pont trop long sans support", "Vitesse pont trop haute", "Refroidissement insuffisant"],
+    defect: "Weak bridges",
+    symptoms: ["Sagging on long bridges", "Strings/threads on bridges"],
+    causes: ["Bridge too long without support", "Bridge speed too high", "Insufficient cooling"],
     fixes: [
-      "Réduire bridge speed (40% de la vitesse d'impression)",
-      "Augmenter bridge fan speed à 100% (sauf ABS)",
-      "Bridge flow ratio : réduire légèrement si cordes",
-      "Ajouter supports si pont >20mm",
+      "Lower bridge speed (40% of print speed)",
+      "Raise bridge fan speed to 100% (except ABS)",
+      "Bridge flow ratio: lower slightly if strings appear",
+      "Add supports if the bridge is >20mm",
     ],
   },
   {
-    defect: "Adhésion au plateau",
-    symptoms: ["Peu de surface de contact", "Pièce instable"],
-    causes: ["Surface de contact trop petite", "Première couche mal calibrée", "Surface sale"],
+    defect: "Bed adhesion",
+    symptoms: ["Small contact area", "Unstable part"],
+    causes: ["Contact area too small", "First layer poorly calibrated", "Dirty surface"],
     fixes: [
-      "Brim ou raft si surface de contact faible",
-      "Ajuster Live Adjust Z pendant impression",
-      "Augmenter bed +5-10°C si adhésion limite",
-      "Nettoyer surface (IPA pour PEI, eau chaude pour Textured)",
+      "Brim or raft if the contact area is small",
+      "Tune Live Adjust Z during the print",
+      "Raise bed +5-10°C if adhesion is marginal",
+      "Clean the surface (IPA for PEI, hot water for Textured)",
     ],
   },
   {
-    defect: "Détails fins perdus",
-    symptoms: ["Features très petites", "Haute densité de triangles localement"],
-    causes: ["Buse trop grosse pour les détails", "Layer height trop élevé"],
+    defect: "Lost fine details",
+    symptoms: ["Very small features", "High local triangle density"],
+    causes: ["Nozzle too large for the details", "Layer height too high"],
     fixes: [
-      "Utiliser une buse plus fine (0.25mm pour détails XY)",
-      "Réduire layer height (25-30% du diamètre buse)",
-      "Prusa déconseille <0.10mm (gain faible vs temps très élevé)",
+      "Use a smaller nozzle (0.25mm for XY detail)",
+      "Lower layer height (25-30% of nozzle diameter)",
+      "Prusa advises against <0.10mm (small gain, much longer print)",
     ],
   },
 ];
 
 /**
- * Generate Bible FDM diagnostic hints based on detected printability issues.
+ * Generate FDM Bible diagnostic hints based on detected printability issues.
  */
 function generateDiagnosticHints(issues: PrintIssue[]): DefectDiagnosis[] {
   const hints: DefectDiagnosis[] = [];
   const categories = new Set(issues.map((i) => i.category));
 
-  if (categories.has("Stabilité") || categories.has("Adhésion")) {
-    const warpHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Warping potentiel");
+  if (categories.has("Stability") || categories.has("Adhesion")) {
+    const warpHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Potential warping");
     if (warpHint) hints.push(warpHint);
   }
 
   if (categories.has("Overhangs")) {
-    const ohHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Problèmes d'overhangs");
+    const ohHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Overhang problems");
     if (ohHint) hints.push(ohHint);
   }
 
-  if (categories.has("Ponts")) {
-    const brHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Ponts fragiles");
+  if (categories.has("Bridges")) {
+    const brHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Weak bridges");
     if (brHint) hints.push(brHint);
   }
 
-  if (categories.has("Adhésion")) {
-    const adhHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Adhésion au plateau");
+  if (categories.has("Adhesion")) {
+    const adhHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Bed adhesion");
     if (adhHint) hints.push(adhHint);
   }
 
-  if (categories.has("Détails fins")) {
-    const detHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Détails fins perdus");
+  if (categories.has("Fine details")) {
+    const detHint = BIBLE_FDM_DIAGNOSTICS.find((d) => d.defect === "Lost fine details");
     if (detHint) hints.push(detHint);
   }
 

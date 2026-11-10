@@ -6,7 +6,7 @@ import type {
   MeshAnalysis,
 } from "./types.js";
 
-// ─── Material Database (Official Prusa values from Bible FDM) ─────
+// ─── Material Database (Official Prusa values from the FDM Bible) ─────
 
 const MATERIALS: Record<string, MaterialProfile> = {
   PLA: {
@@ -20,9 +20,9 @@ const MATERIALS: Record<string, MaterialProfile> = {
     retractionLength: 0.8,
     retractionSpeed: 35,
     maxVolumetricSpeed: 15,     // Bible: PLA ~15 mm³/s
-    notes: "Facile à imprimer. Privilégier EM/MVS avant d'augmenter rétraction pour stringing.",
+    notes: "Easy to print. For stringing, tune EM/MVS before raising retraction.",
     requiresEnclosure: false,
-    recommendedSurface: "Satin ou Smooth PEI",
+    recommendedSurface: "Satin or Smooth PEI",
   },
   PETG: {
     name: "PETG",
@@ -33,10 +33,10 @@ const MATERIALS: Record<string, MaterialProfile> = {
     fanSpeed: 50,
     minFanSpeed: 30,
     bridgeFanSpeed: 80,
-    retractionLength: 0.8,       // Bible: rétraction réduite 0.8-1mm max pour PETG
+    retractionLength: 0.8,       // Bible: reduced retraction, 0.8-1mm max for PETG
     retractionSpeed: 30,
     maxVolumetricSpeed: 8,       // Bible: PETG MVS ~8 mm³/s
-    notes: "Stringing/oozing si trop chaud. MVS officiel ≈8 mm³/s. Rétraction max 0.8-1mm.",
+    notes: "Stringing/oozing if too hot. Official MVS ≈8 mm³/s. Retraction max 0.8-1mm.",
     requiresEnclosure: false,
     recommendedSurface: "Textured/Satin PEI",
   },
@@ -51,9 +51,9 @@ const MATERIALS: Record<string, MaterialProfile> = {
     retractionLength: 0.8,
     retractionSpeed: 35,
     maxVolumetricSpeed: 11,      // Bible: ABS/ASA ~11 mm³/s
-    notes: "Enceinte fermée obligatoire. Warping: priorité enceinte, brim, temp plateau.",
+    notes: "Closed enclosure required. Warping: enclosure first, then brim, then bed temp.",
     requiresEnclosure: true,
-    recommendedSurface: "Smooth PEI ou Textured (avec colle si nécessaire)",
+    recommendedSurface: "Smooth PEI or Textured (with glue if needed)",
   },
   ASA: {
     name: "ASA",
@@ -67,9 +67,9 @@ const MATERIALS: Record<string, MaterialProfile> = {
     retractionLength: 0.8,
     retractionSpeed: 35,
     maxVolumetricSpeed: 11,      // Bible: ABS/ASA ~11 mm³/s
-    notes: "Résistant UV. Enceinte obligatoire, anti-courants d'air. Ajuster supports/overhang speed plutôt que fan.",
+    notes: "UV resistant. Enclosure required, no drafts. Adjust supports/overhang speed rather than fan.",
     requiresEnclosure: true,
-    recommendedSurface: "Smooth ou Textured PEI",
+    recommendedSurface: "Smooth or Textured PEI",
   },
   TPU: {
     name: "TPU",
@@ -80,12 +80,12 @@ const MATERIALS: Record<string, MaterialProfile> = {
     fanSpeed: 50,
     minFanSpeed: 30,
     bridgeFanSpeed: 60,
-    retractionLength: 0.5,       // Bible: rétraction délicate pour TPU
+    retractionLength: 0.5,       // Bible: retraction is tricky for TPU
     retractionSpeed: 20,
     maxVolumetricSpeed: 2,       // Bible: TPU ~1-2.5 mm³/s
-    notes: "Vitesse cadrée via MVS (1-2.5 mm³/s). Smooth PEI déconseillé sans séparation (glue). Direct drive recommandé.",
+    notes: "Speed capped via MVS (1-2.5 mm³/s). Avoid Smooth PEI without a release layer (glue). Direct drive recommended.",
     requiresEnclosure: false,
-    recommendedSurface: "PA Nylon / Satin / Textured PEI (pas Smooth sans colle)",
+    recommendedSurface: "PA Nylon / Satin / Textured PEI (not Smooth without glue)",
   },
   NYLON: {
     name: "NYLON",
@@ -98,7 +98,7 @@ const MATERIALS: Record<string, MaterialProfile> = {
     retractionLength: 1.2,
     retractionSpeed: 30,
     maxVolumetricSpeed: 8,
-    notes: "Hygroscopique — séchage 12h@80°C obligatoire. Enceinte critique. Priorité plateau/surface/enceinte.",
+    notes: "Hygroscopic: drying 12h@80°C required. Enclosure is critical. Priorities: bed, surface, enclosure.",
     requiresEnclosure: true,
     recommendedSurface: "Special PA Nylon sheet",
   },
@@ -114,9 +114,9 @@ const MATERIALS: Record<string, MaterialProfile> = {
     retractionLength: 0.8,
     retractionSpeed: 35,
     maxVolumetricSpeed: 8,
-    notes: "Haute temp. Enceinte 50°C+ obligatoire. Risque d'arrachement sheet — couche séparation selon cas.",
+    notes: "High temperature. Enclosure at 50°C+ required. Can tear the sheet surface; use a release layer when needed.",
     requiresEnclosure: true,
-    recommendedSurface: "Textured/Satin PEI (glue séparation si Smooth)",
+    recommendedSurface: "Textured/Satin PEI (glue as release layer on Smooth)",
   },
 };
 
@@ -138,7 +138,7 @@ const GOALS: Record<PrintGoal, GoalPreset> = {
     infill: 10,
     fillPattern: "grid",
     perimeters: 2,
-    description: "Prototype rapide — vitesse max, qualité minimum",
+    description: "Rapid prototype — max speed, minimal quality",
   },
   standard: {
     layerRatio: 0.5,     // e.g., 0.20mm for 0.4mm nozzle
@@ -146,7 +146,7 @@ const GOALS: Record<PrintGoal, GoalPreset> = {
     infill: 20,
     fillPattern: "grid",
     perimeters: 3,
-    description: "Bon compromis qualité/temps",
+    description: "Good balance of quality and time",
   },
   quality: {
     layerRatio: 0.3,     // e.g., 0.12mm for 0.4mm nozzle
@@ -154,7 +154,7 @@ const GOALS: Record<PrintGoal, GoalPreset> = {
     infill: 20,
     fillPattern: "gyroid",
     perimeters: 4,
-    description: "Beau rendu — surface lisse, détails visibles",
+    description: "Nice finish — smooth surface, visible detail",
   },
   strong: {
     layerRatio: 0.5,
@@ -162,7 +162,7 @@ const GOALS: Record<PrintGoal, GoalPreset> = {
     infill: 50,
     fillPattern: "cubic",
     perimeters: 5,
-    description: "Production solide — résistance mécanique maximale",
+    description: "Strong production part — maximum mechanical strength",
   },
   vase: {
     layerRatio: 0.5,
@@ -170,7 +170,7 @@ const GOALS: Record<PrintGoal, GoalPreset> = {
     infill: 0,
     fillPattern: "rectilinear",
     perimeters: 1,
-    description: "Mode vase spirale — 1 paroi, pas de remplissage",
+    description: "Spiral vase mode — 1 perimeter, no infill",
   },
   speed: {
     layerRatio: 0.75,    // max layer height
@@ -178,58 +178,94 @@ const GOALS: Record<PrintGoal, GoalPreset> = {
     infill: 10,
     fillPattern: "grid",
     perimeters: 2,
-    description: "Speedrun — buse grosse, tout à fond",
+    description: "Speedrun — big nozzle, everything flat out",
   },
 };
 
 // ─── Goal Aliases ────────────────────────────────────────────
 
+// English and French (with and without accents) map to the same goal.
 const GOAL_ALIASES: Record<string, PrintGoal> = {
   "draft": "draft",
   "prototype": "draft",
-  "prototype rapide": "draft",
-  "rapide": "draft",
+  "rapid prototype": "draft",
+  "fast prototype": "draft",
+  "quick prototype": "draft",
+  "prototyping": "draft",
   "fast": "draft",
   "quick": "draft",
+  "rough": "draft",
+  "prototype rapide": "draft",
+  "rapide": "draft",
   "brouillon": "draft",
 
   "standard": "standard",
   "normal": "standard",
   "default": "standard",
   "balanced": "standard",
+  "medium": "standard",
+  "general purpose": "standard",
+  "everyday": "standard",
   "équilibré": "standard",
+  "equilibre": "standard",
 
   "quality": "quality",
+  "high quality": "quality",
+  "best quality": "quality",
+  "nice finish": "quality",
+  "nice": "quality",
+  "beautiful": "quality",
+  "smooth": "quality",
+  "fine": "quality",
+  "fine detail": "quality",
+  "detail": "quality",
+  "detailed": "quality",
+  "high detail": "quality",
   "qualité": "quality",
+  "qualite": "quality",
   "beau rendu": "quality",
   "beau": "quality",
-  "fine": "quality",
-  "detail": "quality",
   "détail": "quality",
-  "high quality": "quality",
 
   "strong": "strong",
-  "solide": "strong",
-  "production solide": "strong",
-  "résistant": "strong",
+  "strength": "strong",
   "structural": "strong",
+  "functional": "strong",
+  "functional part": "strong",
   "production": "strong",
   "robust": "strong",
   "mechanical": "strong",
+  "durable": "strong",
+  "tough": "strong",
+  "sturdy": "strong",
+  "solide": "strong",
+  "production solide": "strong",
+  "résistant": "strong",
+  "resistant": "strong",
+  "robuste": "strong",
 
   "vase": "vase",
   "vase mode": "vase",
   "spiral": "vase",
+  "spiral vase": "vase",
+  "spiral vase mode": "vase",
+  "spiralize": "vase",
   "spirale": "vase",
+  "mode vase": "vase",
+  "vase spirale": "vase",
 
   "speed": "speed",
   "speedrun": "speed",
-  "extrusion maxi": "speed",
+  "speed run": "speed",
   "max speed": "speed",
+  "maximum speed": "speed",
   "fastest": "speed",
+  "very fast": "speed",
+  "extrusion maxi": "speed",
+  "vitesse max": "speed",
 };
 
-// ─── Nozzle Size Reference Table (Bible FDM) ────────────────
+// ─── Nozzle Size Reference Table (FDM Bible) ────────────────
 // Prusa official: max layer height ≈ 80% nozzle, usable range 25%-75%
 // Auto extrusion width = 1.125 × nozzle diameter
 
@@ -246,10 +282,10 @@ function getNozzleSpec(nozzle: number): NozzleSpec {
     maxLayerHeight: round2(nozzle * 0.80),   // Bible: 80% of nozzle (Prusa official)
     autoExtrusionWidth: round2(nozzle * 1.125), // Bible: PrusaSlicer default = 1.125×D
     notes: nozzle >= 0.6
-      ? `Buse ${nozzle}mm : possible +10-20°C et MVS↑ si besoin de débit. Attention capé par MVS — réduire layer height donne "détail gratuit".`
+      ? `${nozzle}mm nozzle: +10-20°C and a higher MVS are possible if more flow is needed. When capped by MVS, a lower layer height gives "free detail".`
       : nozzle <= 0.25
-        ? `Buse ${nozzle}mm : détails XY meilleurs. Vitesses réalistes plus basses. Supports plus fins et faciles à retirer.`
-        : `Buse ${nozzle}mm : standard. Prusa déconseille <0.10mm (gain faible vs temps très élevé).`,
+        ? `${nozzle}mm nozzle: better XY detail. Realistic speeds are lower. Supports are finer and easier to remove.`
+        : `${nozzle}mm nozzle: standard. Prusa advises against layers <0.10mm (small gain, much longer print).`,
   };
 }
 
@@ -273,12 +309,13 @@ export function recommendProfile(
   const preset = GOALS[resolvedGoal];
 
   // Resolve material
-  const mat = MATERIALS[material.toUpperCase()] ?? MATERIALS["PLA"];
+  const materialKey = MATERIALS[material.toUpperCase()] ? material.toUpperCase() : "PLA";
+  const mat = MATERIALS[materialKey];
 
-  // Nozzle specs (Bible FDM rules)
+  // Nozzle specs (FDM Bible rules)
   const nozzleSpec = getNozzleSpec(nozzle);
 
-  // Input Shaper mode (Bible FDM: higher accel/speed if firmware supports it)
+  // Input Shaper mode (FDM Bible: higher accel/speed if firmware supports it)
   const inputShaper = options?.inputShaper ?? false;
 
   // Base speeds (mm/s) — higher base if Input Shaper enabled
@@ -290,10 +327,10 @@ export function recommendProfile(
 
   // Input Shaper warning
   if (inputShaper) {
-    warnings.push("Mode Input Shaper activé — vitesses et accélérations plus élevées (Bible FDM: vérifier correspondance profil ⇄ firmware)");
+    warnings.push("Input Shaper mode on — higher speeds and accelerations (FDM Bible: check that the profile matches the firmware)");
   }
 
-  // Layer height: nozzle × ratio, clamped to [25%, 80%] of nozzle (Bible FDM rule)
+  // Layer height: nozzle × ratio, clamped to [25%, 80%] of nozzle (FDM Bible rule)
   const rawLayerHeight = round2(nozzle * preset.layerRatio);
   const layerHeight = clamp(rawLayerHeight, nozzleSpec.minLayerHeight, nozzleSpec.maxLayerHeight);
 
@@ -314,19 +351,19 @@ export function recommendProfile(
   if (theoreticalFlow > maxVolumetricFlow) {
     const cappedSpeed = Math.floor(maxVolumetricFlow / (layerHeight * lineWidth));
     warnings.push(
-      `Débit volumique capé par MVS (${maxVolumetricFlow} mm³/s pour ${mat.name}) : ` +
+      `Volumetric flow capped by MVS (${maxVolumetricFlow} mm³/s for ${mat.name}): ` +
       `${printSpeed}mm/s → ${cappedSpeed}mm/s. ` +
-      `Astuce Bible FDM : réduire la hauteur de couche peut donner du "détail gratuit" sans augmenter le temps.`
+      `FDM Bible tip: a lower layer height can give "free detail" without adding print time.`
     );
     printSpeed = cappedSpeed;
     mvsLimited = true;
   }
 
-  // TPU needs slow speed (Bible: vitesse cadrée via MVS)
+  // TPU needs slow speed (Bible: speed capped via MVS)
   if (mat.name === "TPU") {
     printSpeed = Math.min(printSpeed, 25);
     if (!mvsLimited) {
-      warnings.push("TPU: vitesse limitée à 25mm/s max. Direct drive recommandé.");
+      warnings.push("TPU: speed limited to 25mm/s max. Direct drive recommended.");
     }
   }
 
@@ -339,7 +376,7 @@ export function recommendProfile(
   if (resolvedGoal === "strong" && meshAnalysis) {
     if (meshAnalysis.volume < 5000) {
       infill = 80;
-      warnings.push("Pièce très petite (<5cm³) — infill augmenté à 80% pour la solidité");
+      warnings.push("Very small part (<5cm³) — infill raised to 80% for strength");
     }
   }
 
@@ -355,7 +392,7 @@ export function recommendProfile(
     supportMaterial = true;
     supportStyle = meshAnalysis.overhangPercent > 20 ? "snug" : "grid";
     warnings.push(
-      `${meshAnalysis.overhangPercent.toFixed(1)}% de faces en overhang détectées — supports activés`
+      `${meshAnalysis.overhangPercent.toFixed(1)}% of faces detected as overhangs — supports enabled`
     );
   }
 
@@ -370,7 +407,7 @@ export function recommendProfile(
 
   if (needsBrim) {
     brimWidth = 5;
-    warnings.push("Brim activé (5mm) — matériau sujet au warping ou pièce haute/étroite");
+    warnings.push("Brim enabled (5mm) — warp-prone material or tall/narrow part");
   }
 
   // Acceleration
@@ -395,142 +432,147 @@ export function recommendProfile(
     nozzleTemp += 15;
     firstLayerNozzleTemp += 10;
     warnings.push(
-      `Buse ≥0.6mm en mode speed : temp buse +15°C (${nozzleTemp}°C) pour suivre le débit volumique (Bible FDM : PLA imprimable 10-20°C plus chaud avec buse 0.6mm)`
+      `Nozzle ≥0.6mm in speed mode: nozzle temp +15°C (${nozzleTemp}°C) to keep up with volumetric flow (FDM Bible: PLA prints 10-20°C hotter with a 0.6mm nozzle)`
     );
   } else if (resolvedGoal === "speed") {
     nozzleTemp += 10;
     firstLayerNozzleTemp += 5;
-    warnings.push("Mode speed : température buse +10°C pour suivre le débit");
+    warnings.push("Speed mode: nozzle temp +10°C to keep up with flow");
   }
 
   // Bed temp
   const bedTemp = mat.bedTemp;
   const firstLayerBedTemp = mat.firstLayerBedTemp ?? bedTemp;
 
-  // Drying warnings for hygroscopic materials (Bible FDM)
+  // Drying warnings for hygroscopic materials (FDM Bible)
   const DRYING_INFO: Record<string, string> = {
-    NYLON: "Nylon : séchage obligatoire 12h@80°C. Hygroscopique — stocker sous vide avec dessiccant.",
-    PC: "PC : séchage recommandé 8h@80°C. Sensible à l'humidité.",
-    TPU: "TPU : séchage recommandé 4h@50°C. Absorbe l'humidité rapidement.",
-    PETG: "PETG : séchage recommandé 4-6h@65°C si stringing/bulles persistants. Modérément hygroscopique.",
-    PVA: "PVA : séchage obligatoire 8h@45°C. Extrêmement hygroscopique — utiliser immédiatement après séchage.",
-    BVOH: "BVOH : séchage obligatoire 6h@50°C. Très hygroscopique.",
+    NYLON: "Nylon: drying required, 12h@80°C. Hygroscopic: store sealed with desiccant.",
+    PC: "PC: drying recommended, 8h@80°C. Sensitive to moisture.",
+    TPU: "TPU: drying recommended, 4h@50°C. Absorbs moisture quickly.",
+    PETG: "PETG: drying recommended, 4-6h@65°C if stringing/bubbles persist. Moderately hygroscopic.",
+    PVA: "PVA: drying required, 8h@45°C. Extremely hygroscopic: use right after drying.",
+    BVOH: "BVOH: drying required, 6h@50°C. Very hygroscopic.",
   };
-  const dryInfo = DRYING_INFO[mat.name.toUpperCase()];
+  // Keyed by material, not display name: "PC (Polycarbonate)" would never match "PC".
+  const dryInfo = DRYING_INFO[materialKey];
   if (dryInfo) {
-    warnings.push(`Bible FDM — ${dryInfo}`);
+    warnings.push(`FDM Bible — ${dryInfo}`);
   }
 
-  // Enclosure warnings (Bible FDM)
+  // Enclosure warnings (FDM Bible)
   if (mat.requiresEnclosure) {
-    warnings.push(`${mat.name}: enceinte fermée obligatoire — ${mat.notes}`);
+    warnings.push(`${mat.name}: closed enclosure required — ${mat.notes}`);
   }
 
-  // Recommended surface (Bible FDM)
+  // Recommended surface (FDM Bible)
   if (mat.recommendedSurface) {
-    warnings.push(`Surface plateau recommandée : ${mat.recommendedSurface}`);
+    warnings.push(`Recommended bed surface: ${mat.recommendedSurface}`);
   }
 
-  // Extrusion multiplier (Bible: calibration fine du débit réel, default 1.0)
+  // Extrusion multiplier (Bible: fine calibration of the actual flow, default 1.0)
   const extrusionMultiplier = 1.0;
 
   // Build the recommendation
   const settings: RecommendedProfile["settings"] = {
     layer_height: {
       value: layerHeight,
-      reason: `Buse ${nozzle}mm — plage utilisable ${nozzleSpec.minLayerHeight}-${nozzleSpec.maxLayerHeight}mm (Bible FDM: 25%-80% du diamètre buse). ` +
+      reason: `${nozzle}mm nozzle — usable range ${nozzleSpec.minLayerHeight}-${nozzleSpec.maxLayerHeight}mm (FDM Bible: 25%-80% of nozzle diameter). ` +
         `Ratio ${preset.layerRatio} → ${rawLayerHeight}mm (${preset.description})`,
     },
     line_width: {
       value: lineWidth,
-      reason: `PrusaSlicer auto = ${nozzleSpec.autoExtrusionWidth}mm (1.125×buse). ` +
-        `${resolvedGoal === "speed" ? "Mode speed: 1.2×buse pour débit max." : "Valeur standard PrusaSlicer."}`,
+      reason: `PrusaSlicer auto = ${nozzleSpec.autoExtrusionWidth}mm (1.125×nozzle). ` +
+        `${resolvedGoal === "speed" ? "Speed mode: 1.2×nozzle for max flow." : "Standard PrusaSlicer value."}`,
     },
     perimeters: {
       value: perimeters,
       reason: resolvedGoal === "strong"
-        ? "5 parois pour résistance mécanique maximale"
+        ? "5 perimeters for maximum mechanical strength"
         : resolvedGoal === "vase"
-          ? "1 paroi — mode vase spirale"
-          : `${perimeters} parois — ${preset.description.toLowerCase()}`,
+          ? "1 perimeter — spiral vase mode"
+          : `${perimeters} perimeters (${preset.description.toLowerCase()})`,
     },
     infill_density: {
       value: infill,
       reason: resolvedGoal === "strong"
-        ? `${infill}% — haute densité pour résistance`
+        ? `${infill}% — high density for strength`
         : resolvedGoal === "vase"
-          ? "0% — mode vase, pas de remplissage"
-          : `${infill}% — suffisant pour ${preset.description.toLowerCase()}`,
+          ? "0% — vase mode, no infill"
+          : `${infill}% — enough for this goal (${preset.description.toLowerCase()})`,
     },
     fill_pattern: {
       value: fillPattern,
       reason: fillPattern === "gyroid"
-        ? "Gyroid — isotrope, bonne résistance dans toutes les directions, beau rendu"
+        ? "Gyroid — isotropic, good strength in every direction, nice finish"
         : fillPattern === "cubic"
-          ? "Cubic — résistance 3D optimale pour pièces structurelles"
-          : "Grid — simple et rapide",
+          ? "Cubic — best 3D strength for structural parts"
+          : "Grid — simple and fast",
     },
     nozzle_temperature: {
       value: nozzleTemp,
-      reason: `${mat.name} officiel Prusa : ${mat.nozzleTemp}°C${nozzleTemp !== mat.nozzleTemp ? ` (ajusté +${nozzleTemp - mat.nozzleTemp}°C pour débit)` : ""}`,
+      reason: `${mat.name} Prusa official: ${mat.nozzleTemp}°C${nozzleTemp !== mat.nozzleTemp ? ` (raised +${nozzleTemp - mat.nozzleTemp}°C for flow)` : ""}`,
     },
     first_layer_nozzle_temperature: {
       value: firstLayerNozzleTemp,
-      reason: `Première couche ${firstLayerNozzleTemp}°C — légèrement plus chaude pour meilleure adhésion (Bible FDM)`,
+      reason: firstLayerNozzleTemp > nozzleTemp
+        ? `First layer ${firstLayerNozzleTemp}°C, slightly hotter for better adhesion (FDM Bible)`
+        : firstLayerNozzleTemp < nozzleTemp
+          ? `First layer ${firstLayerNozzleTemp}°C, cooler than the rest (${mat.name}: Prusa official value)`
+          : `First layer ${firstLayerNozzleTemp}°C, same as the other layers`,
     },
     bed_temperature: {
       value: bedTemp,
-      reason: `${mat.name} — ${bedTemp}°C (valeur Prusa officielle)`,
+      reason: `${mat.name} — ${bedTemp}°C (Prusa official value)`,
     },
     first_layer_bed_temperature: {
       value: firstLayerBedTemp,
       reason: firstLayerBedTemp !== bedTemp
-        ? `Première couche : ${firstLayerBedTemp}°C (5°C+ pour adhésion initiale — Bible FDM)`
-        : `${firstLayerBedTemp}°C — même que le reste`,
+        ? `First layer: ${firstLayerBedTemp}°C (+5°C or more for initial adhesion, FDM Bible)`
+        : `${firstLayerBedTemp}°C — same as the other layers`,
     },
     print_speed: {
       value: printSpeed,
       reason: mvsLimited
-        ? `Limité par MVS ${maxVolumetricFlow} mm³/s (${mat.name}). Formule: MVS = layer_height × extrusion_width × speed`
-        : `Base ${baseSpeed}mm/s × ${preset.speedMultiplier} (${resolvedGoal})${mat.name === "TPU" ? " — limité pour TPU" : ""}`,
+        ? `Limited by MVS ${maxVolumetricFlow} mm³/s (${mat.name}). Formula: MVS = layer_height × extrusion_width × speed`
+        : `Base ${baseSpeed}mm/s × ${preset.speedMultiplier} (${resolvedGoal})${mat.name === "TPU" ? " — limited for TPU" : ""}`,
     },
     travel_speed: {
       value: travelSpeed,
-      reason: `Déplacement rapide — ${travelSpeed}mm/s`,
+      reason: `Fast travel — ${travelSpeed}mm/s`,
     },
     first_layer_speed: {
       value: firstLayerSpeed,
-      reason: `50% de la vitesse d'impression — adhésion première couche (Bible FDM : 1ère couche dépend de calibration Z et temp)`,
+      reason: `50% of print speed — first layer adhesion (FDM Bible: the first layer depends on Z calibration and temperature)`,
     },
     support_material: {
       value: supportMaterial,
       reason: meshAnalysis
         ? supportMaterial
-          ? `Overhangs détectés (${meshAnalysis.overhangPercent.toFixed(1)}%) — supports nécessaires`
-          : `Pas d'overhangs significatifs (${meshAnalysis.overhangPercent.toFixed(1)}%)`
-        : "Pas d'analyse mesh disponible — à évaluer visuellement",
+          ? `Overhangs detected (${meshAnalysis.overhangPercent.toFixed(1)}%) — supports needed`
+          : `No significant overhangs (${meshAnalysis.overhangPercent.toFixed(1)}%)`
+        : "No mesh analysis available — check visually",
     },
     support_material_style: {
       value: supportStyle,
       reason: supportStyle === "snug"
-        ? "Beaucoup d'overhangs — support snug pour meilleur contact"
-        : "Support grid — standard, facile à retirer",
+        ? "Many overhangs — snug supports for better contact"
+        : "Grid supports — standard, easy to remove",
     },
     support_material_contact_distance: {
       value: supportContactDistance,
-      reason: `${supportContactDistance}mm — ~60% de la hauteur de couche (Bible FDM : 50-75% recommandé pour bon retrait)`,
+      reason: `${supportContactDistance}mm — ~60% of layer height (FDM Bible: 50-75% recommended for clean removal)`,
     },
     brim_width: {
       value: brimWidth,
       reason: brimWidth > 0
-        ? "Brim pour améliorer l'adhésion et réduire le warping"
-        : "Pas de brim nécessaire — bonne surface de contact",
+        ? "Brim to improve adhesion and reduce warping"
+        : "No brim needed — good contact area",
     },
     fan_speed: {
       value: fanSpeed,
       reason: fanSpeed === 0
-        ? `${mat.name} — ventilateur désactivé (sinon délamination/warping — Bible FDM)`
-        : `${mat.name} — ventilateur à ${fanSpeed}% pour refroidissement optimal`,
+        ? `${mat.name} — fan off (otherwise delamination/warping, FDM Bible)`
+        : `${mat.name} — fan at ${fanSpeed}% for optimal cooling`,
     },
     min_fan_speed: {
       value: minFanSpeed,
@@ -538,41 +580,41 @@ export function recommendProfile(
     },
     bridge_fan_speed: {
       value: bridgeFanSpeed,
-      reason: `${bridgeFanSpeed}% pour les ponts — refroidissement accru nécessaire pour solidifier le pont (Bible FDM)`,
+      reason: `${bridgeFanSpeed}% for bridges — extra cooling needed to set the bridge (FDM Bible)`,
     },
     min_layer_time: {
       value: minLayerTime,
-      reason: `${minLayerTime}s minimum par couche — laisse le temps au plastique de refroidir`,
+      reason: `${minLayerTime}s minimum per layer — gives the plastic time to cool`,
     },
     retraction_length: {
       value: mat.retractionLength,
       reason: mat.name === "TPU"
-        ? `${mat.retractionLength}mm — minimale pour flexible (Bible FDM: rétraction délicate TPU)`
+        ? `${mat.retractionLength}mm — minimal for flexibles (FDM Bible: TPU retraction is tricky)`
         : mat.name === "PETG"
-          ? `${mat.retractionLength}mm — Bible FDM: PETG max 0.8-1mm rétraction`
-          : `${mat.retractionLength}mm — standard ${mat.name}. Bible FDM: max 2mm MK3, 3.2mm MINI (bowden).`,
+          ? `${mat.retractionLength}mm — FDM Bible: PETG retraction max 0.8-1mm`
+          : `${mat.retractionLength}mm — standard for ${mat.name}. FDM Bible: max 2mm MK3, 3.2mm MINI (bowden).`,
     },
     retraction_speed: {
       value: mat.retractionSpeed,
-      reason: `${mat.retractionSpeed}mm/s — vitesse de rétraction ${mat.name}`,
+      reason: `${mat.retractionSpeed}mm/s — retraction speed for ${mat.name}`,
     },
     max_volumetric_speed: {
       value: maxVolumetricFlow,
-      reason: `${maxVolumetricFlow} mm³/s — Bible FDM : valeur officielle ${mat.name}. ` +
-        `Le MVS est LE levier central PrusaSlicer : il limite auto les vitesses quand nécessaire ` +
-        `sans recalculer manuellement (Filament Settings prime sur Print Settings).`,
+      reason: `${maxVolumetricFlow} mm³/s — FDM Bible: official value for ${mat.name}. ` +
+        `MVS is the central PrusaSlicer control: it caps speeds automatically when needed, ` +
+        `with no manual recalculation (Filament Settings override Print Settings).`,
     },
     extrusion_multiplier: {
       value: extrusionMultiplier,
-      reason: `${extrusionMultiplier} — calibration fine du débit réel. Bible FDM : calibrer EM avant d'ajuster rétraction (un mauvais EM imite stringing/blobs).`,
+      reason: `${extrusionMultiplier} — fine calibration of the actual flow. FDM Bible: calibrate EM before tuning retraction (a wrong EM looks like stringing/blobs).`,
     },
     acceleration: {
       value: acceleration,
       reason: resolvedGoal === "speed"
-        ? "2500mm/s² — accélération haute. Bible FDM : trop haut = ringing/layer shift."
+        ? "2500mm/s² — high acceleration. FDM Bible: too high = ringing/layer shift."
         : resolvedGoal === "quality"
-          ? "500mm/s² — accélération basse pour réduire ringing (vibrations)"
-          : `1000mm/s² — compromis standard. Bible FDM : ajuster si layer shift ou ringing.`,
+          ? "500mm/s² — low acceleration to reduce ringing (vibration)"
+          : `1000mm/s² — standard compromise. FDM Bible: adjust if you see layer shift or ringing.`,
     },
   };
 

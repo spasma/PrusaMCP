@@ -18,6 +18,8 @@ export interface Triangle {
 export interface StlData {
   triangles: Triangle[];
   name: string;
+  /** 3MF only: one entry per placed object (build item), in build order. */
+  parts?: Array<{ name: string; triangles: number }>;
 }
 
 // ─── Mesh Analysis ───────────────────────────────────────────
@@ -128,6 +130,8 @@ export interface CliResult {
 }
 
 export interface GCodeStats {
+  format?: "ascii" | "binary";
+  printerModel?: string;
   estimatedTime?: string;
   estimatedTimeSeconds?: number;
   filamentUsedMm?: number;

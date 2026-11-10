@@ -1,4 +1,5 @@
-import type { Triangle, Vec3, StlData, MeshAnalysis, BoundingBox } from "./types.js";
+import type { Triangle, Vec3, StlData, MeshAnalysis } from "./types.js";
+import { triangleArea, isOverhang, minZ } from "./geometry.js";
 
 /**
  * Full geometric analysis of a parsed STL mesh.
@@ -28,6 +29,9 @@ export function analyzeMesh(stl: StlData): MeshAnalysis {
   let overhangCount = 0;
   const areas: number[] = new Array(n);
 
+  // Faces resting on the bed are supported by it, so overhangs are measured against the lowest point.
+  const bedZ = minZ(triangles);
+
   const bbMin: Vec3 = { x: Infinity, y: Infinity, z: Infinity };
   const bbMax: Vec3 = { x: -Infinity, y: -Infinity, z: -Infinity };
 
@@ -47,11 +51,8 @@ export function analyzeMesh(stl: StlData): MeshAnalysis {
     surfaceArea += area;
     areas[i] = area;
 
-    // Overhang detection: face normal Z component < cos(45°) ≈ -0.707
-    // If the normal points downward (nz < 0) beyond 45°, it's an overhang.
-    // We compute the actual normal from vertices for accuracy.
-    const normal = computeNormal(t.v1, t.v2, t.v3);
-    if (normal.z < -0.707) {
+    // Overhang: face points down more than 45° and does not rest on the bed.
+    if (isOverhang(t, bedZ)) {
       overhangCount++;
     }
   }
@@ -112,32 +113,6 @@ function signedTetraVolume(v1: Vec3, v2: Vec3, v3: Vec3): number {
       v1.z * (v2.x * v3.y - v2.y * v3.x)) /
     6
   );
-}
-
-/**
- * Area of a triangle via cross product: ||(v2-v1) × (v3-v1)|| / 2
- */
-function triangleArea(v1: Vec3, v2: Vec3, v3: Vec3): number {
-  const ax = v2.x - v1.x, ay = v2.y - v1.y, az = v2.z - v1.z;
-  const bx = v3.x - v1.x, by = v3.y - v1.y, bz = v3.z - v1.z;
-  const cx = ay * bz - az * by;
-  const cy = az * bx - ax * bz;
-  const cz = ax * by - ay * bx;
-  return Math.sqrt(cx * cx + cy * cy + cz * cz) / 2;
-}
-
-/**
- * Compute normalized face normal from vertices.
- */
-function computeNormal(v1: Vec3, v2: Vec3, v3: Vec3): Vec3 {
-  const ax = v2.x - v1.x, ay = v2.y - v1.y, az = v2.z - v1.z;
-  const bx = v3.x - v1.x, by = v3.y - v1.y, bz = v3.z - v1.z;
-  const nx = ay * bz - az * by;
-  const ny = az * bx - ax * bz;
-  const nz = ax * by - ay * bx;
-  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-  if (len === 0) return { x: 0, y: 0, z: 1 };
-  return { x: nx / len, y: ny / len, z: nz / len };
 }
 
 /**

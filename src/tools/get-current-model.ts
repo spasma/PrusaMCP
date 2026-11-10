@@ -1,362 +1,203 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { readFile, readdir, stat } from "node:fs/promises";
-import { join, extname, basename, dirname } from "node:path";
+import { stat } from "node:fs/promises";
+import { basename, dirname, extname } from "node:path";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import type { PrusaConfig } from "../types.js";
 import { analyzeMesh } from "../mesh-analyzer.js";
 import { getPrusaSlicerWindow } from "../platform/index.js";
+import {
+  readPrusaSlicerState,
+  parseWindowTitle,
+  matchRecentProjects,
+  findFileByName,
+  candidateFileNames,
+  defaultSearchDirs,
+  findRecentModels,
+} from "../prusaslicer-state.js";
+import { readPrusaProject, PROJECT_SUMMARY_KEYS } from "../project-3mf.js";
 import { parseModel } from "./analyze-mesh.js";
 
-const MODEL_EXTENSIONS = [".3mf", ".stl", ".obj"];
 const ANALYZABLE_EXTENSIONS = [".3mf", ".stl"];
 
-/** PrusaSlicer translates "Untitled"; these are the languages it ships most often. */
-const UNTITLED_NAMES = /^(untitled|sans titre|naamloos|unbenannt|senza titolo|sin título|bez názvu)$/i;
-
-// ─── PrusaSlicer Window Title ────────────────────────────────
-
-/**
- * Extract the project name from PrusaSlicer's window title.
- * Formats (the suffix is translated, the " - PrusaSlicer" part is not):
- *   "name - PrusaSlicer-2.9.7 based on Slic3r"
- *   "*name - PrusaSlicer-2.9.7 gebaseerd op Slic3r"  (modified)
- *   "*Sans titre - PrusaSlicer-2.9.4 basé sur Slic3r" (untitled)
- * PrusaSlicer shows the project name without extension for 3MF projects,
- * and may show the file name with extension after importing a model.
- */
-function extractNameFromTitle(title: string): string | null {
-  const dashIndex = title.indexOf(" - PrusaSlicer");
-  if (dashIndex === -1) return null;
-
-  let name = title.substring(0, dashIndex).trim();
-
-  // Remove leading * (unsaved changes marker)
-  if (name.startsWith("*")) name = name.substring(1);
-
-  if (!name || UNTITLED_NAMES.test(name)) return null;
-
-  return name;
-}
-
-// ─── File Search ─────────────────────────────────────────────
-
-function hasModelExtension(name: string): boolean {
-  return MODEL_EXTENSIONS.includes(extname(name).toLowerCase());
-}
-
-/** "part.v2" stays "part.v2": only a known model extension is dropped. */
-function stripModelExtension(name: string): string {
-  return hasModelExtension(name) ? name.slice(0, -extname(name).length) : name;
-}
-
-/** The name as shown, or with each model extension when the title has none. */
-function candidateFileNames(name: string): string[] {
-  return hasModelExtension(name) ? [name] : MODEL_EXTENSIONS.map((ext) => name + ext);
-}
-
-/** Recent projects are full paths, so a match needs no directory guessing. Most recent first. */
-function matchRecentProjects(name: string, recentProjects: string[]): string[] {
-  const wanted = name.toLowerCase();
-  return recentProjects.filter((path) => {
-    const file = basename(path).toLowerCase();
-    return file === wanted || stripModelExtension(file) === wanted;
-  });
-}
-
-/**
- * Search for a file by name across common directories.
- */
-async function findFileByName(
-  fileNames: string[],
-  searchDirs: string[],
-): Promise<string | null> {
-  const wanted = new Set(fileNames.map((n) => n.toLowerCase()));
-  for (const dir of searchDirs) {
-    if (!existsSync(dir)) continue;
-
-    try {
-      const entries = await readdir(dir);
-      for (const entry of entries) {
-        if (wanted.has(entry.toLowerCase())) {
-          return join(dir, entry);
-        }
-      }
-    } catch {
-      // skip unreadable dirs
-    }
-  }
-  return null;
-}
-
-function defaultSearchDirs(skeinDirectory: string | null): string[] {
-  const home = homedir();
-  const dirs = [
-    skeinDirectory,
-    join(home, "Downloads"),
-    join(home, "Desktop"),
-    join(home, "Documents"),
-  ];
-
-  if (process.platform === "win32") {
-    dirs.push(
-      join(home, "Bureau"),
-      join(home, "OneDrive", "Bureau"),
-      join(home, "OneDrive", "Documents"),
-      join(home, "OneDrive", "Downloads"),
-    );
-  } else if (process.platform === "darwin") {
-    dirs.push(join(home, "Library", "Mobile Documents", "com~apple~CloudDocs"));
-  }
-
-  return dirs.filter(Boolean) as string[];
-}
-
-/**
- * Find the most recently modified STL/3MF files in a directory.
- */
-async function findRecentModels(
-  dir: string,
-  limit: number = 5,
-): Promise<Array<{ path: string; mtime: Date }>> {
-  if (!existsSync(dir)) return [];
-
-  const entries = await readdir(dir);
-  const models: Array<{ path: string; mtime: Date }> = [];
-
-  for (const entry of entries) {
-    if (!hasModelExtension(entry)) continue;
-
-    const fullPath = join(dir, entry);
-    try {
-      const stats = await stat(fullPath);
-      models.push({ path: fullPath, mtime: stats.mtime });
-    } catch {
-      // skip
-    }
-  }
-
-  models.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-  return models.slice(0, limit);
-}
-
-// ─── PrusaSlicer.ini State ───────────────────────────────────
-
-interface PrusaSlicerState {
-  skeinDirectory: string | null;
-  currentPrinter: string | null;
-  currentFilament: string | null;
-  currentPrintProfile: string | null;
-  /** Full paths, most recent first. */
-  recentProjects: string[];
-}
-
-const EMPTY_STATE: PrusaSlicerState = {
-  skeinDirectory: null,
-  currentPrinter: null,
-  currentFilament: null,
-  currentPrintProfile: null,
-  recentProjects: [],
-};
-
-/** "[recent_projects]" holds "1 = /path/a.3mf", "2 = ...", most recent first. */
-function parseRecentProjects(content: string): string[] {
-  const entries: Array<[number, string]> = [];
-  let inSection = false;
-
-  for (const line of content.split(/\r?\n/)) {
-    const header = line.match(/^\s*\[(.+)\]\s*$/);
-    if (header) {
-      inSection = header[1] === "recent_projects";
-      continue;
-    }
-    if (!inSection) continue;
-
-    const entry = line.match(/^\s*(\d+)\s*=\s*(.+?)\s*$/);
-    if (entry) entries.push([Number(entry[1]), entry[2]]);
-  }
-
-  return entries.sort((a, b) => a[0] - b[0]).map(([, path]) => path);
-}
-
-async function readPrusaSlicerState(profilesDir: string): Promise<PrusaSlicerState> {
-  const iniPath = join(profilesDir, "PrusaSlicer.ini");
-  if (!existsSync(iniPath)) {
-    return { ...EMPTY_STATE };
-  }
-
-  const content = await readFile(iniPath, "utf-8");
-  const state: PrusaSlicerState = { ...EMPTY_STATE };
-
-  const skeinMatch = content.match(/skein_directory\s*=\s*(.+)/);
-  if (skeinMatch) state.skeinDirectory = skeinMatch[1].trim();
-
-  const printerMatch = content.match(/^printer\s*=\s*(.+)$/m);
-  if (printerMatch) state.currentPrinter = printerMatch[1].trim();
-
-  const filamentMatch = content.match(/^filament\s*=\s*(.+)$/m);
-  if (filamentMatch) state.currentFilament = filamentMatch[1].trim();
-
-  const printMatch = content.match(/^print\s*=\s*(.+)$/m);
-  if (printMatch) state.currentPrintProfile = printMatch[1].trim();
-
-  state.recentProjects = parseRecentProjects(content);
-
-  return state;
-}
-
-// ─── Tool Registration ───────────────────────────────────────
+type Content =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
 
 export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) {
   server.registerTool(
     "get_current_model",
     {
-      title: "Voir le modèle ouvert dans PrusaSlicer",
+      title: "Model open in PrusaSlicer",
       description:
-        "Détecte le fichier actuellement ouvert dans PrusaSlicer en lisant le titre de la fenêtre. " +
-        "Retourne le chemin du fichier, les presets actifs (imprimante, filament, profil), " +
-        "et une analyse complète du mesh si c'est un STL ou un 3MF.",
+        "Finds the project or model open in PrusaSlicer (from the window title, else PrusaSlicer's recent projects) " +
+        "and returns its path, the selected presets, a mesh analysis, and for a 3MF saved by PrusaSlicer " +
+        "the project's settings, per-object overrides and its thumbnail. Needs no screenshot.",
       inputSchema: {
-        analyze: z
-          .boolean()
-          .default(true)
-          .describe("Lancer l'analyse mesh automatiquement"),
+        analyze: z.boolean().default(true).describe("Run the mesh analysis"),
+        include_thumbnail: z.boolean().default(true).describe("Return the project's thumbnail image (3MF saved by PrusaSlicer)"),
+        full_config: z.boolean().default(false).describe("Return every setting of the project instead of a summary"),
+      },
+      annotations: {
+        title: "Model open in PrusaSlicer",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
-    async ({ analyze }) => {
+    async ({ analyze, include_thumbnail, full_config }) => {
       try {
         const lines: string[] = [];
+        const content: Content[] = [];
+        const state = await readPrusaSlicerState(config.profilesDir);
 
-        // 1. Read PrusaSlicer state from ini
-        let state: PrusaSlicerState = { ...EMPTY_STATE };
-        if (config.profilesDir) {
-          state = await readPrusaSlicerState(config.profilesDir);
-        }
-
-        // 2. Get window title to find current file
         const window = await getPrusaSlicerWindow();
-
         if (!window) {
-          return {
-            isError: true,
-            content: [{
-              type: "text" as const,
-              text: "PrusaSlicer ne semble pas être ouvert. Lance PrusaSlicer et charge un modèle.",
-            }],
-          };
+          return error("PrusaSlicer does not seem to be running. Start it and load a model.");
         }
 
-        lines.push("## État PrusaSlicer");
-        lines.push(`**Imprimante** : ${state.currentPrinter || "non définie"}`);
-        lines.push(`**Filament** : ${state.currentFilament || "non défini"}`);
-        lines.push(`**Profil** : ${state.currentPrintProfile || "non défini"}`);
+        lines.push("## PrusaSlicer");
+        lines.push(`**Printer**: ${state.presets.printer || "not set"}`);
+        lines.push(`**Filament**: ${state.presets.filament || "not set"}`);
+        lines.push(`**Print**: ${state.presets.print || "not set"}`);
         lines.push("");
 
-        // 3. Find the file: from the window title, or the most recent project when the title is unreadable
+        // 1. Find the file: from the window title, or the most recent project when the title is unreadable
         let filePath: string | null = null;
+        let modified = false;
 
         if (window.title === null) {
-          lines.push(window.note
-            ? `_Titre de la fenêtre illisible : ${window.note}_`
-            : "_Titre de la fenêtre illisible._");
+          lines.push(window.note ? `_Window title unreadable: ${window.note}_` : "_Window title unreadable._");
           filePath = state.recentProjects.find((p) => existsSync(p)) ?? null;
           if (!filePath) {
-            lines.push("");
-            lines.push("_Aucun projet récent trouvé. Donne-moi le chemin complet pour que je puisse l'analyser._");
-            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+            lines.push("", "_No recent project found. Give me the full path to analyze it._");
+            return text(lines);
           }
-          lines.push(`_Hypothèse : le projet le plus récent de PrusaSlicer._`);
-          lines.push("");
-          lines.push(`## Fichier détecté : ${basename(filePath)}`);
+          lines.push("_Assuming PrusaSlicer's most recent project._", "");
+          lines.push(`## Model: ${basename(filePath)}`);
         } else {
-          const name = extractNameFromTitle(window.title);
+          const title = parseWindowTitle(window.title);
+          modified = title.modified;
 
-          if (!name) {
-            lines.push("**Modèle** : Aucun fichier ouvert (projet sans titre)");
-            lines.push("");
-            lines.push("_Charge un fichier STL/3MF dans PrusaSlicer pour que je puisse l'analyser._");
-            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          if (!title.name) {
+            lines.push("**Model**: none (untitled project)");
+            lines.push("", "_Load an STL/3MF in PrusaSlicer so I can analyze it._");
+            return text(lines);
           }
 
-          lines.push(`## Fichier détecté : ${name}`);
+          lines.push(`## Model: ${title.name}`);
 
-          // 4. Resolve on disk: recent projects first (full paths), then the usual directories
           const searchDirs = defaultSearchDirs(state.skeinDirectory);
-          const recentMatches = matchRecentProjects(name, state.recentProjects);
+          const recentMatches = matchRecentProjects(title.name, state.recentProjects);
           filePath =
             recentMatches.find((p) => existsSync(p)) ??
-            (await findFileByName(candidateFileNames(name), searchDirs));
+            (await findFileByName(candidateFileNames(title.name), searchDirs));
 
           if (!filePath) {
-            lines.push(`**Chemin** : Fichier "${name}" introuvable dans les projets récents ni dans les dossiers habituels.`);
+            lines.push(`**Path**: "${title.name}" not found in recent projects or the usual folders.`);
             if (recentMatches.length > 0) {
-              lines.push(`Dernier emplacement connu : ${recentMatches[0]} (déplacé ou supprimé depuis ?)`);
+              lines.push(`Last known location: ${recentMatches[0]} (moved or deleted since?)`);
             }
-            lines.push(`Dossiers cherchés : ${searchDirs.join(", ")}`);
-            lines.push("");
-            lines.push("_Donne-moi le chemin complet pour que je puisse l'analyser._");
-            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+            lines.push(`Searched: ${searchDirs.join(", ")}`);
+            lines.push("", "_Give me the full path to analyze it._");
+            return text(lines);
           }
         }
 
-        lines.push(`**Chemin** : ${filePath}`);
-
-        // 5. Get file stats
+        lines.push(`**Path**: ${filePath}`);
         try {
           const fileStats = await stat(filePath);
-          const sizeMB = (fileStats.size / 1024 / 1024).toFixed(2);
-          lines.push(`**Taille** : ${sizeMB} MB`);
-          lines.push(`**Modifié** : ${fileStats.mtime.toLocaleString()}`);
+          lines.push(`**Size**: ${(fileStats.size / 1024 / 1024).toFixed(2)} MB`);
+          lines.push(`**Modified**: ${fileStats.mtime.toLocaleString()}`);
         } catch { /* skip */ }
-
+        if (modified) {
+          lines.push("_PrusaSlicer has unsaved changes: the file below shows the last saved state._");
+        }
         lines.push("");
 
-        // 6. Analyze mesh (STL or 3MF)
         const ext = extname(filePath).toLowerCase();
+
+        // 2. Project settings (3MF saved by PrusaSlicer)
+        if (ext === ".3mf") {
+          const project = await readPrusaProject(filePath).catch(() => null);
+          if (project?.config) {
+            lines.push("## Project settings");
+            const keys = full_config ? [...project.config.keys()].sort() : PROJECT_SUMMARY_KEYS;
+            const settingLines = keys
+              .filter((k) => project.config!.has(k))
+              .map((k) => `${k} = ${project.config!.get(k)}`);
+            lines.push("```ini", ...settingLines, "```");
+            lines.push("");
+          } else if (project) {
+            lines.push("_This 3MF has no PrusaSlicer project settings (exported by another program)._", "");
+          }
+
+          const special = (project?.objects ?? []).filter(
+            (o) => Object.keys(o.settings).length > 0 || Object.keys(o.volumes).length > 0 || o.instances > 1,
+          );
+          if (special.length > 0) {
+            lines.push("## Objects");
+            for (const o of special) {
+              const parts = [
+                o.instances > 1 ? `${o.instances} instances` : null,
+                ...Object.entries(o.settings).map(([k, v]) => `${k} = ${v}`),
+                ...Object.entries(o.volumes).map(([type, n]) => `${n}× ${type}`),
+              ].filter(Boolean);
+              lines.push(`- **${o.name}**: ${parts.join(", ")}`);
+            }
+            lines.push("");
+          }
+
+          if (include_thumbnail && project?.thumbnail) {
+            content.push({ type: "image", data: project.thumbnail.toString("base64"), mimeType: "image/png" });
+          }
+        }
+
+        // 3. Mesh analysis (STL or 3MF)
         if (analyze && ANALYZABLE_EXTENSIONS.includes(ext)) {
           console.error(`[get_current_model] Analyzing: ${filePath}`);
           const model = await parseModel(filePath);
           const analysis = analyzeMesh(model);
           const bb = analysis.boundingBox;
 
-          lines.push("## Analyse Mesh");
-          lines.push(`**Dimensions** : ${bb.size.x.toFixed(2)} × ${bb.size.y.toFixed(2)} × ${bb.size.z.toFixed(2)} mm`);
-          lines.push(`**Volume** : ${analysis.volume.toFixed(2)} mm³ (${(analysis.volume / 1000).toFixed(2)} cm³)`);
-          lines.push(`**Surface** : ${analysis.surfaceArea.toFixed(2)} mm²`);
-          lines.push(`**Triangles** : ${analysis.triangleCount.toLocaleString()}`);
+          lines.push("## Mesh analysis");
+          if (model.parts && model.parts.length > 0) {
+            lines.push(`**Objects**: ${model.parts.length} (${model.name})`);
+          }
+          lines.push(`**Dimensions**: ${bb.size.x.toFixed(2)} × ${bb.size.y.toFixed(2)} × ${bb.size.z.toFixed(2)} mm`);
+          lines.push(`**Volume**: ${analysis.volume.toFixed(2)} mm³ (${(analysis.volume / 1000).toFixed(2)} cm³)`);
+          lines.push(`**Surface**: ${analysis.surfaceArea.toFixed(2)} mm²`);
+          lines.push(`**Triangles**: ${analysis.triangleCount.toLocaleString()}`);
           lines.push("");
-          lines.push(`**Overhangs** : ${analysis.overhangPercent.toFixed(1)}%${analysis.overhangPercent > 5 ? " — supports recommandés" : " — OK, pas de support nécessaire"}`);
-          lines.push(`**Manifold** : ${analysis.isManifold ? "OK (mesh fermé)" : "NON — " + analysis.nonManifoldEdges + " arêtes problématiques, repair recommandé"}`);
-          lines.push(`**Détails fins** : ${analysis.hasSmallDetails ? "Oui (" + analysis.smallDetailPercent.toFixed(1) + "% de petits triangles)" : "Non"}`);
+          lines.push(`**Overhangs**: ${analysis.overhangPercent.toFixed(1)}%${analysis.overhangPercent > 5 ? ", supports recommended" : ", no supports needed"}`);
+          lines.push(`**Manifold**: ${analysis.isManifold ? "yes (closed mesh)" : `no, ${analysis.nonManifoldEdges} problem edges; repair recommended`}`);
+          lines.push(`**Fine details**: ${analysis.hasSmallDetails ? `yes (${analysis.smallDetailPercent.toFixed(1)}% small triangles)` : "no"}`);
           lines.push("");
         } else if (analyze && ext === ".obj") {
-          lines.push("_Fichier OBJ détecté — l'analyse mesh n'est disponible que pour les STL et 3MF._");
+          lines.push("_OBJ file: mesh analysis supports STL and 3MF only._");
         }
 
-        // 7. Other recent files in same directory
+        // 4. Other recent files in the same folder
         const currentName = basename(filePath);
-        const recentModels = await findRecentModels(dirname(filePath));
-        const others = recentModels.filter((m) => basename(m.path) !== currentName);
+        const others = (await findRecentModels(dirname(filePath))).filter((m) => basename(m.path) !== currentName);
         if (others.length > 0) {
-          lines.push("## Autres fichiers dans le dossier");
+          lines.push("## Other models in this folder");
           for (const m of others) {
             lines.push(`- ${basename(m.path)} (${m.mtime.toLocaleString()})`);
           }
         }
 
-        return {
-          content: [{ type: "text" as const, text: lines.join("\n") }],
-        };
-      } catch (error) {
-        return {
-          isError: true,
-          content: [{
-            type: "text" as const,
-            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
-          }],
-        };
+        return { content: [{ type: "text" as const, text: lines.join("\n") }, ...content] };
+      } catch (err) {
+        return error(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
+}
+
+function text(lines: string[]) {
+  return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+}
+
+function error(message: string) {
+  return { isError: true, content: [{ type: "text" as const, text: message }] };
 }

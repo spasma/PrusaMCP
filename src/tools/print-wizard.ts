@@ -13,18 +13,26 @@ export function registerPrintWizard(server: McpServer) {
   server.registerTool(
     "print_wizard",
     {
-      title: "Assistant d'impression complet",
+      title: "Print wizard",
       description:
-        "Analyse complète d'un modèle 3D avec recommandations. " +
-        "Retourne : analyse mesh, problèmes détectés, meilleure orientation, " +
-        "profil recommandé, estimation de coût, et questions à poser à l'utilisateur " +
-        "pour affiner les paramètres. Idéal comme point d'entrée pour un nouveau print.",
+        "Full analysis of a 3D model with recommendations. " +
+        "Returns: mesh analysis, detected issues, best orientation, " +
+        "recommended profile, cost estimate, and questions to ask the user " +
+        "to refine the settings. A good entry point for a new print.",
       inputSchema: {
-        file_path: z.string().describe("Chemin absolu vers le fichier STL ou 3MF"),
-        printer: z.string().optional().describe("Imprimante (si connue)"),
-        nozzle: z.number().optional().describe("Buse en mm (si connue)"),
-        material: z.string().optional().describe("Matériau (si connu)"),
-        goal: z.string().optional().describe("Objectif (si connu)"),
+        file_path: z.string().describe("Absolute path to the STL or 3MF file"),
+        printer: z.string().optional().describe("Printer (if known)"),
+        nozzle: z.number().optional().describe("Nozzle diameter in mm (if known)"),
+        material: z.string().optional().describe("Material (if known)"),
+        goal: z.string().optional().describe(
+          "Print goal (if known): 'draft', 'standard', 'quality', 'strong', 'vase' or 'speed'; " +
+          "accepts the same aliases as recommend_profile"
+        ),
+      },
+      annotations: {
+        title: "Print wizard",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
     async ({ file_path, printer, nozzle, material, goal }) => {
@@ -32,7 +40,7 @@ export function registerPrintWizard(server: McpServer) {
         if (!existsSync(file_path)) {
           return {
             isError: true,
-            content: [{ type: "text" as const, text: `Fichier non trouvé : ${file_path}` }],
+            content: [{ type: "text" as const, text: `File not found: ${file_path}` }],
           };
         }
 
@@ -46,55 +54,55 @@ export function registerPrintWizard(server: McpServer) {
         const bb = analysis.boundingBox;
         const lines: string[] = [];
 
-        // ─── Section 1: Analyse mesh ──────────────────
-        lines.push("## 1. Analyse du modèle");
-        lines.push(`- **Dimensions** : ${bb.size.x.toFixed(1)} × ${bb.size.y.toFixed(1)} × ${bb.size.z.toFixed(1)} mm`);
-        lines.push(`- **Volume** : ${(analysis.volume / 1000).toFixed(2)} cm³`);
-        lines.push(`- **Triangles** : ${analysis.triangleCount.toLocaleString()}`);
-        lines.push(`- **Manifold** : ${analysis.isManifold ? "OK" : "NON — repair nécessaire"}`);
+        // ─── Section 1: Mesh analysis ─────────────────
+        lines.push("## 1. Model analysis");
+        lines.push(`- **Dimensions**: ${bb.size.x.toFixed(1)} × ${bb.size.y.toFixed(1)} × ${bb.size.z.toFixed(1)} mm`);
+        lines.push(`- **Volume**: ${(analysis.volume / 1000).toFixed(2)} cm³`);
+        lines.push(`- **Triangles**: ${analysis.triangleCount.toLocaleString()}`);
+        lines.push(`- **Manifold**: ${analysis.isManifold ? "OK" : "NO (repair needed)"}`);
         lines.push("");
 
-        // ─── Section 2: Printabilité ──────────────────
-        lines.push(`## 2. Printabilité : ${issues.score}/100`);
+        // ─── Section 2: Printability ──────────────────
+        lines.push(`## 2. Printability: ${issues.score}/100`);
         lines.push(`_${issues.summary}_`);
         if (issues.issues.length > 0) {
           for (const issue of issues.issues) {
-            const icon = issue.severity === "error" ? "ERREUR" : issue.severity === "warning" ? "ATTENTION" : "INFO";
-            lines.push(`- **[${icon}] ${issue.category}** : ${issue.message}`);
+            const icon = issue.severity === "error" ? "ERROR" : issue.severity === "warning" ? "WARNING" : "INFO";
+            lines.push(`- **[${icon}] ${issue.category}**: ${issue.message}`);
           }
         }
         lines.push("");
 
         // ─── Section 3: Orientation ───────────────────
-        lines.push("## 3. Orientation recommandée");
+        lines.push("## 3. Recommended orientation");
         lines.push(`**${bestOrientation.name}** (score ${bestOrientation.score}/100)`);
-        lines.push(`- Overhangs : ${bestOrientation.overhangPercent.toFixed(1)}% | Hauteur : ${bestOrientation.printHeight.toFixed(1)}mm | Contact : ${bestOrientation.bedContact.toFixed(1)}mm²`);
+        lines.push(`- Overhangs: ${bestOrientation.overhangPercent.toFixed(1)}% | Height: ${bestOrientation.printHeight.toFixed(1)}mm | Bed contact: ${bestOrientation.bedContact.toFixed(1)}mm²`);
         if (bestOrientation.rotation.axisX !== 0 || bestOrientation.rotation.axisY !== 0) {
-          lines.push(`- _Rotation : X=${bestOrientation.rotation.axisX}° Y=${bestOrientation.rotation.axisY}°_`);
+          lines.push(`- _Rotation: X=${bestOrientation.rotation.axisX}° Y=${bestOrientation.rotation.axisY}°_`);
         }
         lines.push("");
 
-        // ─── Section 4: Profil si infos disponibles ──
+        // ─── Section 4: Profile, when enough info is given ──
         if (goal) {
           const p = printer ?? "Generic";
           const n = nozzle ?? 0.4;
           const m = material ?? "PLA";
           const profile = recommendProfile(p, n, goal, m, analysis);
 
-          lines.push(`## 4. Profil recommandé (${profile.goal})`);
+          lines.push(`## 4. Recommended profile (${profile.goal})`);
           const keySettings = [
-            `Layer : ${profile.settings.layer_height.value}mm`,
-            `Vitesse : ${profile.settings.print_speed.value}mm/s`,
-            `MVS : ${profile.settings.max_volumetric_speed.value}mm³/s`,
-            `Infill : ${profile.settings.infill_density.value}%`,
-            `Périmètres : ${profile.settings.perimeters.value}`,
-            `Buse : ${profile.settings.nozzle_temperature.value}°C`,
-            `Plateau : ${profile.settings.bed_temperature.value}°C`,
-            `Supports : ${profile.settings.support_material.value ? "Oui" : "Non"}`,
+            `Layer: ${profile.settings.layer_height.value}mm`,
+            `Speed: ${profile.settings.print_speed.value}mm/s`,
+            `MVS: ${profile.settings.max_volumetric_speed.value}mm³/s`,
+            `Infill: ${profile.settings.infill_density.value}%`,
+            `Perimeters: ${profile.settings.perimeters.value}`,
+            `Nozzle: ${profile.settings.nozzle_temperature.value}°C`,
+            `Bed: ${profile.settings.bed_temperature.value}°C`,
+            `Supports: ${profile.settings.support_material.value ? "Yes" : "No"}`,
           ];
           lines.push(keySettings.join(" | "));
 
-          // Estimation de coût
+          // Cost estimate
           const cost = estimateCostFromMesh(
             analysis,
             profile.settings.layer_height.value as number,
@@ -103,64 +111,64 @@ export function registerPrintWizard(server: McpServer) {
             profile.settings.print_speed.value as number,
             m,
           );
-          lines.push(`**Temps estimé** : ${cost.printTimeFormatted} | **Coût** : ~${cost.totalCostEur}€ (${cost.filamentWeightG}g de filament)`);
+          lines.push(`**Estimated time**: ${cost.printTimeFormatted} | **Cost**: ~€${cost.totalCostEur} (${cost.filamentWeightG}g of filament)`);
           lines.push("");
         }
 
-        // ─── Section 5: Questions QCM ─────────────────
-        lines.push("## 5. Questions pour affiner");
-        lines.push("_Pour optimiser les paramètres, demande à l'utilisateur :_");
+        // ─── Section 5: Multiple-choice questions ─────
+        lines.push("## 5. Questions to refine the settings");
+        lines.push("_To tune the settings, ask the user:_");
         lines.push("");
 
-        // Questions dynamiques basées sur l'analyse
+        // Dynamic questions based on the analysis
         const questions: Array<{ question: string; options: string[] }> = [];
 
         if (!goal) {
           questions.push({
-            question: "Quel est l'objectif de cette impression ?",
+            question: "What is the goal of this print?",
             options: [
-              "Prototype rapide (vite fait, qualité secondaire)",
-              "Standard (bon compromis qualité/temps)",
-              "Haute qualité (beau rendu, détails fins)",
-              "Solide / structurel (résistance mécanique)",
-              "Le plus rapide possible",
+              "Quick prototype (fast, quality secondary)",
+              "Standard (good balance of quality and time)",
+              "High quality (clean finish, fine detail)",
+              "Strong / structural (mechanical strength)",
+              "As fast as possible",
             ],
           });
         }
 
         if (!material) {
           questions.push({
-            question: "Quel matériau vas-tu utiliser ?",
-            options: ["PLA", "PETG", "ABS", "TPU (flexible)", "Autre"],
+            question: "Which material will you use?",
+            options: ["PLA", "PETG", "ABS", "TPU (flexible)", "Other"],
           });
         }
 
         if (analysis.overhangPercent > 5) {
           questions.push({
-            question: `Le modèle a ${analysis.overhangPercent.toFixed(0)}% d'overhangs. Tu veux des supports ?`,
+            question: `The model has ${analysis.overhangPercent.toFixed(0)}% overhangs. Do you want supports?`,
             options: [
-              "Oui, supports partout",
-              "Oui, uniquement où c'est nécessaire",
-              "Non, je tente sans (risqué)",
-              "Réorienter la pièce pour éviter les supports",
+              "Yes, supports everywhere",
+              "Yes, only where needed",
+              "No, try without (risky)",
+              "Reorient the part to avoid supports",
             ],
           });
         }
 
         if (bb.size.z > 2 * Math.max(bb.size.x, bb.size.y) || analysis.overhangPercent < 2) {
           questions.push({
-            question: "Tu veux un brim pour l'adhésion au plateau ?",
+            question: "Do you want a brim for bed adhesion?",
             options: [
-              "Oui, brim 5mm (recommandé pour cette pièce)",
-              "Non, pas de brim",
-              "Raft complet (adhésion maximale)",
+              "Yes, 5mm brim (recommended for this part)",
+              "No brim",
+              "Full raft (maximum adhesion)",
             ],
           });
         }
 
         if (!nozzle) {
           questions.push({
-            question: "Quelle buse est montée sur ton imprimante ?",
+            question: "Which nozzle is installed on your printer?",
             options: ["0.4mm (standard)", "0.5mm", "0.6mm", "0.8mm", "1.0mm"],
           });
         }
@@ -174,7 +182,7 @@ export function registerPrintWizard(server: McpServer) {
         }
 
         if (questions.length === 0) {
-          lines.push("_Toutes les infos nécessaires sont disponibles. Prêt à générer la config !_");
+          lines.push("_All required information is available. Ready to generate the config._");
         }
 
         return {
@@ -185,7 +193,7 @@ export function registerPrintWizard(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur wizard : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Wizard error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

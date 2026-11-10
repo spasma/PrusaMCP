@@ -82,7 +82,7 @@ export function profileToIniSettings(profile: RecommendedProfile): PrusaSlicerSe
   result["retract_lift"] = 0.2;
   result["retract_layer_change"] = 1; // Bible FDM: recommended on
 
-  // Wipe: conditionnel — désactivé pour TPU/flexibles (Bible FDM: rétraction délicate)
+  // Wipe: off for TPU/flexibles (FDM Bible: retraction is delicate with flexible filament)
   const matUpper = profile.material.toUpperCase().replace(/\s*\(.*\)/, ""); // strip "(Polycarbonate)" etc
   result["wipe"] = NO_WIPE_MATERIALS.has(matUpper) ? 0 : 1;
 
@@ -106,11 +106,11 @@ export function profileToIniSettings(profile: RecommendedProfile): PrusaSlicerSe
   result["seam_position"] = "nearest";
 
   // ─── Elephant foot compensation ────────────────────────────
-  // Bible FDM: ajuster si base "écrasée"
+  // FDM Bible: adjust if the base is squashed
   result["elefant_foot_compensation"] = 0.1; // PrusaSlicer uses this exact spelling
 
   // ─── Overhang speed ────────────────────────────────────────
-  // Bible FDM: ajuster supports/overhang speed plutôt que fan (surtout ASA)
+  // FDM Bible: tune supports/overhang speed rather than fan (especially ASA)
   result["overhangs"] = 1; // enable overhang detection for speed reduction
 
   return result;

@@ -13,19 +13,24 @@ export async function parseModel(filePath: string): Promise<StlData> {
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".3mf")) return parse3mf(filePath);
   if (lower.endsWith(".stl")) return parseStl(filePath);
-  throw new Error(`Format non supporté. Formats acceptés : STL, 3MF`);
+  throw new Error(`Unsupported format. Accepted formats: STL, 3MF`);
 }
 
 export function registerAnalyzeMesh(server: McpServer) {
   server.registerTool(
     "analyze_mesh",
     {
-      title: "Analyser un mesh 3D",
+      title: "Analyze a 3D mesh",
       description:
-        "Analyse un fichier STL ou 3MF et retourne : dimensions, volume, surface, " +
-        "pourcentage d'overhangs, détection de détails fins, et vérification manifold.",
+        "Analyzes an STL or 3MF file and returns dimensions, volume, surface area, " +
+        "overhang percentage, fine detail detection and a manifold check.",
       inputSchema: {
-        file_path: z.string().describe("Chemin absolu vers le fichier STL ou 3MF"),
+        file_path: z.string().describe("Absolute path to the STL or 3MF file"),
+      },
+      annotations: {
+        title: "Analyze a 3D mesh",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
     async ({ file_path }) => {
@@ -33,7 +38,7 @@ export function registerAnalyzeMesh(server: McpServer) {
         if (!existsSync(file_path)) {
           return {
             isError: true,
-            content: [{ type: "text" as const, text: `Fichier non trouvé : ${file_path}` }],
+            content: [{ type: "text" as const, text: `File not found: ${file_path}` }],
           };
         }
 
@@ -41,7 +46,7 @@ export function registerAnalyzeMesh(server: McpServer) {
         if (!lower.endsWith(".stl") && !lower.endsWith(".3mf")) {
           return {
             isError: true,
-            content: [{ type: "text" as const, text: "Formats supportés : STL, 3MF" }],
+            content: [{ type: "text" as const, text: "Supported formats: STL, 3MF" }],
           };
         }
 
@@ -52,29 +57,29 @@ export function registerAnalyzeMesh(server: McpServer) {
 
         const bb = analysis.boundingBox;
         const lines = [
-          `## Analyse Mesh : ${mesh.name}`,
+          `## Mesh analysis: ${mesh.name}`,
           "",
-          `**Dimensions (XYZ)** : ${bb.size.x.toFixed(2)} × ${bb.size.y.toFixed(2)} × ${bb.size.z.toFixed(2)} mm`,
-          `**Volume** : ${analysis.volume.toFixed(2)} mm³ (${(analysis.volume / 1000).toFixed(2)} cm³)`,
-          `**Surface** : ${analysis.surfaceArea.toFixed(2)} mm²`,
-          `**Triangles** : ${analysis.triangleCount.toLocaleString()}`,
+          `**Dimensions (XYZ)**: ${bb.size.x.toFixed(2)} × ${bb.size.y.toFixed(2)} × ${bb.size.z.toFixed(2)} mm`,
+          `**Volume**: ${analysis.volume.toFixed(2)} mm³ (${(analysis.volume / 1000).toFixed(2)} cm³)`,
+          `**Surface area**: ${analysis.surfaceArea.toFixed(2)} mm²`,
+          `**Triangles**: ${analysis.triangleCount.toLocaleString()}`,
           "",
           `### Overhangs`,
-          `- Faces en overhang (>45°) : **${analysis.overhangPercent.toFixed(1)}%** (${analysis.overhangTriangles} triangles)`,
+          `- Overhanging faces (>45°): **${analysis.overhangPercent.toFixed(1)}%** (${analysis.overhangTriangles} triangles)`,
           analysis.overhangPercent > 5
-            ? `- Supports probablement nécessaires`
-            : `- Peu d'overhangs — pas de support nécessaire a priori`,
+            ? `- Supports probably needed`
+            : `- Few overhangs, supports likely not needed`,
           "",
-          `### Détails fins`,
-          `- Petits triangles : ${analysis.smallDetailPercent.toFixed(1)}%`,
+          `### Fine details`,
+          `- Small triangles: ${analysis.smallDetailPercent.toFixed(1)}%`,
           analysis.hasSmallDetails
-            ? `- Détails fins détectés — layer height fine recommandée`
-            : `- Pas de détails fins critiques`,
+            ? `- Fine details detected, a small layer height is recommended`
+            : `- No critical fine details`,
           "",
           `### Manifold`,
           analysis.isManifold
-            ? `- Mesh manifold (fermé, prêt pour l'impression)`
-            : `- Mesh non-manifold (${analysis.nonManifoldEdges} arêtes problématiques) — repair recommandé`,
+            ? `- Manifold mesh (closed, ready to print)`
+            : `- Non-manifold mesh (${analysis.nonManifoldEdges} problem edges), repair recommended`,
         ];
 
         return {
@@ -85,7 +90,7 @@ export function registerAnalyzeMesh(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur d'analyse : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Analysis error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

@@ -9,12 +9,17 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
   server.registerTool(
     "screenshot_prusaslicer",
     {
-      title: "Capturer l'écran de PrusaSlicer",
+      title: "Capture the PrusaSlicer window",
       description:
-        "Prend un screenshot de la fenêtre PrusaSlicer (même en arrière-plan) " +
-        "et retourne l'image. Le fichier temporaire est automatiquement supprimé après lecture. " +
-        "Windows et macOS (macOS : autorisation Enregistrement de l'écran requise pour l'app hôte).",
+        "Takes a screenshot of the PrusaSlicer window (even when it is in the background) " +
+        "and returns the image. The temporary file is deleted after reading. " +
+        "Windows and macOS (on macOS the host app needs the Screen Recording permission).",
       inputSchema: {},
+      annotations: {
+        title: "Capture the PrusaSlicer window",
+        readOnlyHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       try {
@@ -31,7 +36,7 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
             isError: true,
             content: [{
               type: "text" as const,
-              text: `Impossible de capturer PrusaSlicer : ${reason}`,
+              text: `Could not capture PrusaSlicer: ${reason}`,
             }],
           };
         }
@@ -57,7 +62,7 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
             },
             {
               type: "text" as const,
-              text: "Screenshot de PrusaSlicer capturé. Je peux voir le modèle sur le plateau, les paramètres d'impression, et l'état général du slicer.",
+              text: "PrusaSlicer screenshot captured. It shows the model on the bed, the print settings and the overall state of the slicer.",
             },
           ],
         };
@@ -66,7 +71,7 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur de capture : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Capture error: ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
       }

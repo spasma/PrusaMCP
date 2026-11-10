@@ -6,14 +6,19 @@ export function registerSearchFilament(server: McpServer) {
   server.registerTool(
     "search_filament",
     {
-      title: "Chercher un filament dans la base de données",
+      title: "Search the filament database",
       description:
-        "Recherche des filaments par marque, matériau ou mot-clé. " +
-        "Retourne les températures recommandées, densité, prix, et notes.",
+        "Searches filaments by brand, material or keyword. " +
+        "Returns recommended temperatures, density, price and notes.",
       inputSchema: {
-        query: z.string().optional().describe("Recherche libre (marque, matériau, mot-clé)"),
-        material: z.string().optional().describe("Filtrer par matériau (PLA, PETG, ABS, TPU...)"),
-        brand: z.string().optional().describe("Filtrer par marque (Prusament, eSUN, Polymaker...)"),
+        query: z.string().optional().describe("Free-text search (brand, material, keyword)"),
+        material: z.string().optional().describe("Filter by material (PLA, PETG, ABS, TPU...)"),
+        brand: z.string().optional().describe("Filter by brand (Prusament, eSUN, Polymaker...)"),
+      },
+      annotations: {
+        title: "Search the filament database",
+        readOnlyHint: true,
+        openWorldHint: false,
       },
     },
     async ({ query, material, brand }) => {
@@ -23,23 +28,23 @@ export function registerSearchFilament(server: McpServer) {
         return {
           content: [{
             type: "text" as const,
-            text: "Aucun filament trouvé. Essaie avec d'autres critères.",
+            text: "No filaments found. Try other criteria.",
           }],
         };
       }
 
-      const lines = [`## Filaments trouvés (${results.length})`, ""];
+      const lines = [`## Filaments found (${results.length})`, ""];
 
       for (const f of results) {
         lines.push(`### ${f.brand} ${f.name} (${f.material})`);
-        lines.push(`- **Buse** : ${f.nozzleTemp[0]}-${f.nozzleTemp[1]}°C`);
-        lines.push(`- **Plateau** : ${f.bedTemp[0]}-${f.bedTemp[1]}°C`);
-        lines.push(`- **Ventilateur** : ${f.fanSpeed[0]}-${f.fanSpeed[1]}%`);
-        lines.push(`- **MVS** : ${f.maxVolumetricSpeed} mm³/s`);
-        lines.push(`- **Densité** : ${f.density} g/cm³`);
-        if (f.pricePerKg) lines.push(`- **Prix** : ~${f.pricePerKg}€/kg`);
-        if (f.requiresEnclosure) lines.push(`- **Enceinte** : obligatoire`);
-        if (f.recommendedSurface) lines.push(`- **Surface** : ${f.recommendedSurface}`);
+        lines.push(`- **Nozzle**: ${f.nozzleTemp[0]}-${f.nozzleTemp[1]}°C`);
+        lines.push(`- **Bed**: ${f.bedTemp[0]}-${f.bedTemp[1]}°C`);
+        lines.push(`- **Fan**: ${f.fanSpeed[0]}-${f.fanSpeed[1]}%`);
+        lines.push(`- **MVS**: ${f.maxVolumetricSpeed} mm³/s`);
+        lines.push(`- **Density**: ${f.density} g/cm³`);
+        if (f.pricePerKg) lines.push(`- **Price**: ~${f.pricePerKg}€/kg`);
+        if (f.requiresEnclosure) lines.push(`- **Enclosure**: required`);
+        if (f.recommendedSurface) lines.push(`- **Surface**: ${f.recommendedSurface}`);
         lines.push(`- _${f.notes}_`);
         lines.push("");
       }

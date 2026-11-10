@@ -27,11 +27,11 @@ export interface PrintFeedback {
   supportUsed: boolean;
   brimUsed: boolean;
 
-  // Results — scored 1-5 (1=terrible, 5=parfait)
-  qualityScore: number;       // qualité de surface
-  adhesionScore: number;      // adhésion au plateau
-  strengthScore: number;      // solidité perçue
-  overallScore: number;       // satisfaction globale
+  // Results, scored 1-5 (1=terrible, 5=perfect)
+  qualityScore: number;       // surface quality
+  adhesionScore: number;      // bed adhesion
+  strengthScore: number;      // perceived strength
+  overallScore: number;       // overall satisfaction
 
   // Issues encountered
   issues: string[];           // warping, stringing, under-extrusion, layer shift, etc.
@@ -223,7 +223,7 @@ export function learnFromFeedback(
   if (stringing / n > 0.3) {
     adjustments.tempAdjust -= 5;
     adjustments.warnings.push(
-      `Stringing fréquent (${Math.round(stringing / n * 100)}% des prints) — temp buse réduite de 5°C`,
+      `Frequent stringing (${Math.round(stringing / n * 100)}% of prints): nozzle temp lowered by 5°C`,
     );
   }
 
@@ -233,7 +233,7 @@ export function learnFromFeedback(
     adjustments.tempAdjust += 5;
     adjustments.speedMultiplier = 0.9;
     adjustments.warnings.push(
-      `Sous-extrusion fréquente — temp +5°C et vitesse -10%`,
+      `Frequent under-extrusion: temp +5°C and speed -10%`,
     );
   }
 
@@ -242,7 +242,7 @@ export function learnFromFeedback(
   if (warping / n > 0.2) {
     adjustments.brimRecommended = true;
     adjustments.warnings.push(
-      `Warping fréquent (${Math.round(warping / n * 100)}% des prints) — brim recommandé`,
+      `Frequent warping (${Math.round(warping / n * 100)}% of prints): brim recommended`,
     );
   }
 
@@ -251,7 +251,7 @@ export function learnFromFeedback(
   if (poorAdhesion / n > 0.3) {
     adjustments.brimRecommended = true;
     adjustments.warnings.push(
-      `Adhésion souvent faible — brim fortement recommandé`,
+      `Bed adhesion often poor: brim strongly recommended`,
     );
   }
 
@@ -260,7 +260,7 @@ export function learnFromFeedback(
   if (weakPrints / n > 0.3) {
     adjustments.infillAdjust += 10;
     adjustments.warnings.push(
-      `Solidité souvent insuffisante — infill +10%`,
+      `Strength often insufficient: infill +10%`,
     );
   }
 
@@ -270,7 +270,7 @@ export function learnFromFeedback(
   if ((layerShift + ringing) / n > 0.2) {
     adjustments.speedMultiplier = Math.min(adjustments.speedMultiplier, 0.85);
     adjustments.warnings.push(
-      `Problèmes de vitesse détectés — vitesse réduite de 15%`,
+      `Speed-related issues detected: speed reduced by 15%`,
     );
   }
 
